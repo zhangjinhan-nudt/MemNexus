@@ -1,0 +1,814 @@
+============================================================
+Initializing SimpleMem System
+============================================================
+Using custom OpenAI base URL: https://api.deepseek.com
+Created new table: memory_entries
+
+Clearing existing database...
+Created new table: memory_entries
+Database cleared
+
+System initialization complete!
+============================================================
+
+Processing window: 20 dialogues (processed 0 so far)
+FTS index created (Tantivy mode)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 20 so far)
+Added 24 memory entries
+Generated 24 memory entries
+
+Processing window: 20 dialogues (processed 40 so far)
+Added 19 memory entries
+Generated 19 memory entries
+
+Processing window: 20 dialogues (processed 60 so far)
+Added 28 memory entries
+Generated 28 memory entries
+
+Processing window: 20 dialogues (processed 80 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 100 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 120 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 140 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 160 so far)
+Added 15 memory entries
+Generated 15 memory entries
+
+Processing window: 20 dialogues (processed 180 so far)
+Added 22 memory entries
+Generated 22 memory entries
+
+Processing window: 20 dialogues (processed 200 so far)
+Added 28 memory entries
+Generated 28 memory entries
+
+Processing window: 20 dialogues (processed 220 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 240 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 260 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 280 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 300 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 320 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 340 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 360 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 380 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 400 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 420 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing remaining dialogues: 16 (fallback mode)
+Added 16 memory entries
+Generated 16 memory entries
+
+[Planning] Analyzing information requirements for: When did Jolene's mom gift her a pendant?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks for the temporal information about the gifting event. Since the minimal queries needed is 1, the original question itself is the most efficient and targeted query to retrieve the required information.
+[Planning] Generated 1 targeted queries
+[Search 1] When did Jolene's mom gift her a pendant?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 24 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are the event of Jolene's mom gifting her a pendant and the specific time or date of the event. Info 1 and Info 2 both state that Jolene's mother gave her the pendant in 2010 in Paris, which directly addresses both the event and the time. Therefore, the information is sufficient to answer the question.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: Which country were Jolene and her mother visiting in 2010?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks for the country visited by Jolene and her mother in 2010. Since the question is specific and factual, a single well-formed query containing all key entities (Jolene, mother, 2010, country) should retrieve the necessary information. Additional queries are unnecessary as they would likely return the same results or be redundant.
+[Planning] Generated 1 targeted queries
+[Search 1] Which country were Jolene and her mother visiting in 2010?
+[Keyword Search] Found 5 results
+[Structured Search] Found 0 results
+[Planning] Found 23 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are an event (a trip or visit involving Jolene and her mother in 2010) and a location (the country visited). Info 1 and Info 3 state that Jolene's mother gave her a pendant in 2010 in Paris. This indicates that Jolene and her mother were in Paris in 2010, which satisfies the event requirement. Paris is in France, so the country visited is France, satisfying the location requirement. Although the information does not explicitly state that they were 'visiting' as tourists, the context of giving a gift in Paris in 2010 implies they were there together, and the question asks which country they were visiting. The available information directly provides the country (France) through the mention of Paris. Therefore, the information is sufficient to answer the question.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: When did Deborah's father pass away?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks for the date of Deborah's father's death, which covers the temporal requirement. However, to ensure we can identify Deborah's father if the original query lacks context, a second query is added to identify the father. This minimal set of two queries efficiently addresses both the identity and temporal information needs.
+[Planning] Generated 2 targeted queries
+[Search 1] When did Deborah's father pass away?
+[Search 2] Who is Deborah's father?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are fully addressed. Deborah's father is identified as 'Deborah's dad' (identity), and the date of his passing is explicitly stated as 2023-01-25 (temporal). Multiple pieces of information consistently provide this date, enabling a comprehensive answer.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: Why did Jolene sometimes put off doing yoga?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for reasons Jolene put off yoga. A single query combining the key entities 'Jolene', 'yoga', and 'put off' should retrieve relevant passages that explain the causal factors and any temporal patterns. This minimal query is efficient and directly targets the required information.
+[Planning] Generated 2 targeted queries
+[Search 1] Why did Jolene sometimes put off doing yoga?
+[Search 2] Why did Jolene put off yoga?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 30 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 0% - The available information does not contain any specific reasons or circumstances that led Jolene to delay or avoid practicing yoga, nor does it indicate any temporal patterns for when she was more likely to put off yoga. The information primarily discusses Deborah's yoga teaching, Jolene's inquiries about yoga, and general conversations, but never addresses why Jolene sometimes put off doing yoga.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information does not contain any direct statements about why Jolene put off doing yoga. We need to find specific reasons or circumstances that led Jolene to delay or avoid yoga, as well as any recurring contexts or times when she was more likely to do so.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Jolene reasons for not doing yoga
+[Additional Search 2] Jolene put off yoga circumstances
+[Additional Search 3] Jolene yoga procrastination patterns
+[Intelligent Reflection Round 1] Total results: 32
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 0% - The available information does not contain any specific reasons or circumstances that led Jolene to delay or avoid practicing yoga, nor does it indicate any temporal patterns for when she was more likely to put off yoga. The information focuses on Deborah's yoga teaching, Jolene's inquiries about yoga, and general conversations, but never addresses why Jolene sometimes put off doing yoga.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information does not contain any direct statements about why Jolene put off doing yoga. We need to find specific reasons or circumstances that led Jolene to delay or avoid yoga, as well as any temporal patterns or recurring contexts.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Jolene reasons for not doing yoga
+[Additional Search 2] Jolene put off yoga circumstances
+[Additional Search 3] Jolene yoga avoidance patterns
+[Intelligent Reflection Round 2] Total results: 32
+
+[Planning] Analyzing information requirements for: What are Jolene's favorite books?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks for Jolene's favorite books, which covers both the identity and preference requirements. However, to ensure comprehensive coverage, especially if the original query lacks context, a second query is added to identify the specific Jolene and her preferences. This minimal set of two queries efficiently targets the required information without redundancy.
+[Planning] Generated 2 targeted queries
+[Search 1] What are Jolene's favorite books?
+[Search 2] Jolene favorite books
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 29 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The identity of Jolene is established through context, but the specific list of Jolene's favorite books is not provided. While Jolene mentions reading 'Avalanche' by Neal Stephenson, it is not explicitly stated as a favorite. Deborah asks about a favorite book, but Jolene's response does not include a list of favorites. Therefore, the required preference information is missing.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The current information does not include Jolene's response to Deborah's question about her favorite book. While Jolene mentioned reading 'Avalanche' by Neal Stephenson, it is not explicitly stated as a favorite. The missing information is Jolene's direct statement of her favorite books.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Jolene favorite book response to Deborah
+[Additional Search 2] Jolene bookshelf favorite books
+[Additional Search 3] Jolene Avalanche Neal Stephenson favorite
+[Intelligent Reflection Round 1] Total results: 44
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The identity of Jolene is sufficiently established through context, but the required information about Jolene's favorite books is only partially addressed. While Jolene mentions being really into 'Sapiens' and having read 'Avalanche' by Neal Stephenson, there is no explicit statement that these are her favorite books, and no comprehensive list of favorites is provided.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The current information provides some details about Jolene's reading preferences, including that she was really into 'Sapiens' and had read 'Avalanche' by Neal Stephenson. However, it is unclear whether these are considered her favorite books. The original question asks for Jolene's favorite books, which may require a more explicit statement from Jolene about her favorites. Additionally, the identity of Jolene is not fully specified (e.g., full name or context), which could help disambiguate if there are multiple Jolene's. The missing information includes a clear list of Jolene's favorite books and possibly her full identity to ensure the correct person is referenced.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Jolene favorite books
+[Additional Search 2] Jolene Sapiens favorite book
+[Additional Search 3] Jolene Avalanche Neal Stephenson favorite
+[Intelligent Reflection Round 2] Total results: 47
+
+[Planning] Analyzing information requirements for: What are Jolene's favorite books?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question is broad and may not disambiguate which Jolene is being referenced. To efficiently gather the required information, we need two targeted queries: one to identify the specific person named Jolene (identity requirement) and another to directly retrieve her favorite books (preference requirement). The original question is included as the second query to capture any direct answers, while the first query adds context to disambiguate the person.
+[Planning] Generated 2 targeted queries
+[Search 1] Jolene identity who is Jolene
+[Search 2] What are Jolene's favorite books?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 45 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The identity of Jolene is sufficiently established through multiple conversation references, but the required information type 'preference' (list of Jolene's favorite books) is not addressed. Although Jolene mentions reading 'Avalanche' by Neal Stephenson, there is no indication that this is a favorite book. Deborah asks about a favorite book, but Jolene's response is not provided. Therefore, the information is incomplete.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The current information does not include Jolene's response to Deborah's question about her favorite book. While Jolene mentioned reading 'Avalanche' by Neal Stephenson, it is not explicitly stated as a favorite. The missing information is Jolene's stated favorite book(s) or any indication of her preferences.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Jolene favorite book response to Deborah
+[Additional Search 2] Jolene bookshelf favorite book conversation
+[Additional Search 3] Jolene Avalanche Neal Stephenson favorite book
+[Intelligent Reflection Round 1] Total results: 61
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The identity of Jolene is sufficiently established through context, but the information about Jolene's favorite books is incomplete. While Jolene mentions being into 'Sapiens' and reading 'Avalanche' by Neal Stephenson, she does not explicitly state that these are her favorite books. Deborah asks about a favorite book, but Jolene's response does not clearly label any book as a favorite. Therefore, the required information type 'preference' is not fully addressed.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information already identifies Jolene as a person who interacts with Deborah and mentions two books she is into: 'Sapiens' and 'Avalanche' by Neal Stephenson. However, the question asks for Jolene's favorite books, and it is not explicitly stated that these are her favorites. The missing information is a clear list of books that Jolene considers her favorites. The current context does not provide a direct statement of favorites, so targeted searches are needed to find if Jolene has expressed favorite books elsewhere.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Jolene favorite books
+[Additional Search 2] Jolene favorite book recommendations
+[Additional Search 3] Jolene bookshelf favorite books
+[Intelligent Reflection Round 2] Total results: 61
+
+[Planning] Analyzing information requirements for: What project did Jolene finish last week before 23 January, 2023?
+[Planning] Identified 4 information requirements
+[Planning] Strategy: The original question is included as it directly targets the core information need. A second query is added to identify who Jolene refers to, which is necessary for disambiguation and to ensure the correct person's project completions are considered.
+[Planning] Generated 2 targeted queries
+[Search 1] What project did Jolene finish last week before 23 January, 2023?
+[Search 2] Jolene identity full name context
+[Keyword Search] Found 4 results
+[Structured Search] Found 5 results
+[Planning] Found 41 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 75% - The information identifies Jolene and provides a temporal constraint, but it does not specify the name or details of the project she finished. The available information only mentions that she finished an electrical engineering project the previous week, without identifying the project itself. Therefore, the required project identification is missing.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Jolene finished an electrical engineering project the week before 23 January 2023, but the specific name or details of that project are not provided. The missing information is the name or description of the project that Jolene completed during the week of 16-22 January 2023.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Jolene electrical engineering project finished week before January 23 2023
+[Additional Search 2] Jolene completed project January 2023 electrical engineering
+[Additional Search 3] Jolene engineering project name January 2023
+[Intelligent Reflection Round 1] Total results: 53
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 75% - The information identifies Jolene and establishes the temporal constraint (16-22 January 2023). It also indicates that Jolene finished an electrical engineering project the previous week relative to 23 January 2023, which falls within the required date range. However, the project is only described generically as an 'electrical engineering project' without a specific name or title, so the project identification requirement is not fully satisfied. Therefore, the information is insufficient to completely answer the question.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The original question asks for the project Jolene finished last week before 23 January 2023. From the available information, we know Jolene mentioned finishing an electrical engineering project the previous week (Info 1). However, the specific name or details of that project are not provided. The available information also mentions a robotics project (Info 10, 15, 44, 48, 51, 53) but that appears to be ongoing and not necessarily finished in the specified week. The missing information is the specific project name or description that Jolene completed between 16-22 January 2023.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Jolene electrical engineering project finished January 2023
+[Additional Search 2] Jolene project completed week before January 23 2023
+[Additional Search 3] Jolene engineering project details January 2023
+[Intelligent Reflection Round 2] Total results: 56
+
+[Planning] Analyzing information requirements for: What are Deborah's favorite books?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Sapiens, Avalanche by Neal Stephenson
+[Planning] Identified 1 information requirements
+[Planning] Strategy: The question asks for Deborah's favorite books, which is a specific personal preference. A single targeted query using the key entities 'Deborah' and 'favorite books' should retrieve the necessary information from the conversation.
+[Planning] Generated 2 targeted queries
+[Search 1] What are Deborah's favorite books?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Sapiens, Avalanche by Neal Stephenson
+[Search 2] Deborah favorite books
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 35 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: Where did Jolene meet her new friend Anna?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. yoga in the park
+[Planning] Identified 1 information requirements
+[Planning] Strategy: The question asks for the location where Jolene met Anna. A single targeted query focusing on the meeting event and location is sufficient to retrieve this information from the conversation.
+[Planning] Generated 2 targeted queries
+[Search 1] Where did Jolene meet her new friend Anna?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. yoga in the park
+[Search 2] Where did Jolene meet her new friend Anna?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 38 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What is Deborah's favorite book which she mentioned on 4 February, 2023?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. "Sapiens"
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question already contains all necessary elements: the person (Deborah), the specific date (4 February 2023), and the information sought (favorite book). A single query using these terms should retrieve the relevant conversation snippet. No additional queries are needed.
+[Planning] Generated 2 targeted queries
+[Search 1] What is Deborah's favorite book which she mentioned on 4 February, 2023?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. "Sapiens"
+[Search 2] Deborah favorite book 4 February 2023
+[Keyword Search] Found 0 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+Using custom OpenAI base URL: https://api.deepseek.com
+{"conversation": "conv-48", "paired_questions": 10, "cumulative_run_cost_rmb": 11.3838}
+============================================================
+Initializing SimpleMem System
+============================================================
+Using custom OpenAI base URL: https://api.deepseek.com
+Created new table: memory_entries
+
+Clearing existing database...
+Created new table: memory_entries
+Database cleared
+
+System initialization complete!
+============================================================
+
+Processing window: 20 dialogues (processed 0 so far)
+FTS index created (Tantivy mode)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 20 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 40 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 60 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 80 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 100 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 120 so far)
+Added 24 memory entries
+Generated 24 memory entries
+
+Processing window: 20 dialogues (processed 140 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 160 so far)
+Added 23 memory entries
+Generated 23 memory entries
+
+Processing window: 20 dialogues (processed 180 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 200 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 220 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 240 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 260 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 280 so far)
+Added 18 memory entries
+Generated 18 memory entries
+
+Processing window: 20 dialogues (processed 300 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 320 so far)
+Added 25 memory entries
+Generated 25 memory entries
+
+Processing remaining dialogues: 17 (fallback mode)
+Added 17 memory entries
+Generated 17 memory entries
+
+[Planning] Analyzing information requirements for: When did Evan have his sudden heart palpitation incident that really shocked him up?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question is already well-formed and directly targets the temporal information required. Since the minimal queries needed is 1, we use the original query as the single search query to retrieve both the date and event details.
+[Planning] Generated 1 targeted queries
+[Search 1] When did Evan have his sudden heart palpitation incident that really shocked him up?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 29 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information indicates that Evan had a sudden heart palpitation incident the week before 6 June 2023, which provides a relative timeframe but not a specific date. The event description is sufficiently detailed to confirm it is the correct incident. However, the exact date or time of the incident is not provided, leaving a critical gap for fully answering the question.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The exact date of Evan's heart palpitation incident is not specified; available information only indicates it occurred 'the week before 6 June, 2023'. The event description is already sufficiently detailed, but the precise date is needed to fully answer the question.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Evan heart palpitation incident date
+[Additional Search 2] Evan sudden heart palpitation week before June 6 2023
+[Additional Search 3] Evan health scare heart palpitation exact date
+[Intelligent Reflection Round 1] Total results: 57
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information confirms the event description (sudden heart palpitation incident that shocked Evan) but only provides a relative time reference ('the week before 6 June, 2023'), not a specific date or time. The exact date of the incident is missing, which is required for a complete answer.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The exact date of Evan's heart palpitation incident is missing. Available information indicates it occurred 'the week before 6 June, 2023', but the specific day is not provided. Additionally, more details about the incident (e.g., symptoms, context) could help confirm it is the correct event.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Evan heart palpitation incident date
+[Additional Search 2] Evan sudden heart palpitation week before June 6 2023
+[Additional Search 3] Evan health scare heart palpitation details
+[Intelligent Reflection Round 2] Total results: 58
+
+[Planning] Analyzing information requirements for: What kind of unhealthy snacks does Sam enjoy eating?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question directly asks for the unhealthy snacks Sam enjoys. A single query combining the key entities 'Sam' and 'unhealthy snacks' should retrieve the required information. No additional queries are needed.
+[Planning] Generated 2 targeted queries
+[Search 1] What kind of unhealthy snacks does Sam enjoy eating?
+[Search 2] What unhealthy snacks does Sam enjoy eating?
+[Keyword Search] Found 1 results
+[Structured Search] Found 5 results
+[Planning] Found 26 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are identity (person named Sam) and preference (specific unhealthy snacks Sam enjoys). Multiple pieces of information (Info 2-5) explicitly state that Sam enjoys soda and candy, which are unhealthy snacks. The identity is clearly addressed as Sam is the subject of these statements. Thus, the information is sufficient to answer the question.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: When did Sam's friends mock him for being overweight?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks for the temporal aspect of the mocking event. To ensure comprehensive coverage, we include the original query and a variant that emphasizes the event identification, which may help retrieve sources that describe the event and its timing.
+[Planning] Generated 2 targeted queries
+[Search 1] When did Sam's friends mock him for being overweight?
+[Search 2] Sam friends mocked overweight event
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The available information explicitly states that Sam's friends mocked him for being overweight on Friday 21 July, 2023, as reported by Sam to Evan on 27 July, 2023. This directly addresses both required information types: the event of mocking and the specific date. No critical gaps remain.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What electronic device could Evan gift Sam to help him keep up with his fitness goals?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question already captures the core relationship and entities. To efficiently gather the required information, we need one query to understand Sam's specific fitness goals and preferences, and another to identify suitable electronic devices for fitness tracking. The original question serves as a third query to directly address the gift suggestion.
+[Planning] Generated 3 targeted queries
+[Search 1] What electronic device could Evan gift Sam to help him keep up with his fitness goals?
+[Search 2] Sam's fitness goals and preferences
+[Search 3] best electronic devices for fitness tracking and goal achievement
+[Keyword Search] Found 0 results
+[Structured Search] Found 5 results
+[Planning] Found 35 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The available information sufficiently addresses all required information types. Sam's fitness goals and preferences are evident from his expressed interest in fitness watches, his desire to stay on track, and his efforts to improve health. Product knowledge is covered by Evan's detailed positive experience with a fitness watch, including tracking progress and motivation. Relationship context is established through supportive conversations and gift-giving context. Thus, the information is complete enough to answer that Evan could gift Sam a fitness watch.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What advice did Evan give Sam about finding a passion?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question is already specific and directly targets the high-priority information requirement (the advice content). Since the context is of medium priority and the minimal queries needed is 1, a single query using the original question should efficiently retrieve both the advice and its context if available in the same source.
+[Planning] Generated 1 targeted queries
+[Search 1] What advice did Evan give Sam about finding a passion?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 28 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are fully addressed. The advice content is clearly provided in multiple entries (e.g., Info 1, 2, 3, 21), stating that Evan advised Sam to keep trying new things until something sparks excitement. The context is also sufficiently covered by surrounding messages (e.g., Info 4, 5, 7, 10, 16, 23) that describe the conversation about hobbies, painting, and Evan's own experience with watercolor painting. No critical gaps remain.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: Where did Evan take his family for a road trip on 24 May, 2023?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question is already specific and targets the required information: the destination of Evan's family road trip on 24 May 2023. A single query containing all key entities should efficiently retrieve the answer.
+[Planning] Generated 2 targeted queries
+[Search 1] Where did Evan take his family for a road trip on 24 May, 2023?
+[Search 2] Where did Evan take his family for a road trip on 24 May 2023?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 26 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The available information confirms that Evan took his family on a road trip to Jasper on the weekend before 24 May 2023, which includes 24 May 2023. The destination is explicitly stated, the temporal context is provided, and the relational connection between Evan and his family is clear. All required information types are addressed.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: Where did Sam take his family for a road trip on 24 May, 2023?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Jasper
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question is already a focused query that directly targets the required information about Sam's family road trip destination on 24 May 2023. Since the information must come from the conversation, no additional queries are needed.
+[Planning] Generated 2 targeted queries
+[Search 1] Where did Sam take his family for a road trip on 24 May, 2023?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Jasper
+[Search 2] Where did Sam take his family for a road trip on 24 May, 2023?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 27 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What did Sam find relaxing about his road trip to Jasper?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. fresh air, peacefulness, cozy cabin surrounded by mountains and forests
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for specific details about what Sam found relaxing during his road trip to Jasper. A single, focused query that includes the key entities (Sam, road trip, Jasper, relaxing) should retrieve the relevant conversation content. Since the information requirements are closely related, one query is sufficient.
+[Planning] Generated 2 targeted queries
+[Search 1] What did Sam find relaxing about his road trip to Jasper?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. fresh air, peacefulness, cozy cabin surrounded by mountains and forests
+[Search 2] What did Sam find relaxing about his road trip to Jasper?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What habit is Evan trying to change in terms of diet?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. consuming soda and candy
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks about a specific dietary habit Evan is trying to change, which requires finding any mention of Evan and his dietary habits in the conversation. A single targeted query focusing on Evan and his diet should suffice to retrieve the relevant information.
+[Planning] Generated 2 targeted queries
+[Search 1] What habit is Evan trying to change in terms of diet?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. consuming soda and candy
+[Search 2] Evan trying to change diet habit
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 35 unique results (semantic + keyword + structured)
+Using custom OpenAI base URL: https://api.deepseek.com
+{"conversation": "conv-49", "paired_questions": 9, "cumulative_run_cost_rmb": 12.6045}
+============================================================
+Initializing SimpleMem System
+============================================================
+Using custom OpenAI base URL: https://api.deepseek.com
+Created new table: memory_entries
+
+Clearing existing database...
+Created new table: memory_entries
+Database cleared
+
+System initialization complete!
+============================================================
+
+Processing window: 20 dialogues (processed 0 so far)
+FTS index created (Tantivy mode)
+Added 25 memory entries
+Generated 25 memory entries
+
+Processing window: 20 dialogues (processed 20 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 40 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 60 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 80 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 100 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 120 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 140 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 160 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 180 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 200 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 220 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 240 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 260 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 280 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 300 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 320 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing remaining dialogues: 16 (fallback mode)
+Added 16 memory entries
+Generated 16 memory entries
+
+[Planning] Analyzing information requirements for: When did Calvin first travel to Tokyo?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for a specific temporal fact about Calvin's first travel to Tokyo. A single, well-crafted query that includes the key entities and the temporal aspect should retrieve the required information efficiently.
+[Planning] Generated 1 targeted queries
+[Search 1] When did Calvin first travel to Tokyo?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 26 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information indicates that Calvin had never been to Japan as of March 23, 2023, and that he attended a music event in Tokyo by April 20, 2023. However, the exact date or time period of his first travel to Tokyo is not specified. The information only provides a range (after March 23 and before April 20) but does not give a precise date or period, which is required to fully answer the question.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Calvin had never been to Japan as of March 23, 2023, and that he attended a music event in Tokyo by April 20, 2023. However, the exact date or time period when Calvin first traveled to Tokyo is not specified. The missing information is the specific date or timeframe of Calvin's first arrival in Tokyo.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Calvin first travel to Tokyo date
+[Additional Search 2] Calvin Tokyo trip arrival date
+[Additional Search 3] Calvin Japan travel timeline 2023
+[Intelligent Reflection Round 1] Total results: 37
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information confirms that Calvin traveled to Tokyo for a music event and that he had never been to Japan before March 23, 2023, but it does not specify the exact date or time period of his first travel to Tokyo. The event is mentioned as having occurred before April 20, 2023, but no precise date is provided.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Calvin had never been to Japan as of March 23, 2023, and was planning to go to Japan 'next month' (April 2023). He attended a music event in Tokyo by April 20, 2023. However, the exact date or time period when Calvin first traveled to Tokyo is not specified. The missing information is the specific date or timeframe of Calvin's first travel to Tokyo.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Calvin first travel to Tokyo date
+[Additional Search 2] Calvin Tokyo trip April 2023
+[Additional Search 3] Calvin Japan travel itinerary 2023
+[Intelligent Reflection Round 2] Total results: 41
+
+[Planning] Analyzing information requirements for: Which country do Calvin and Dave want to meet in?
+[Planning] Identified 1 information requirements
+[Planning] Strategy: The question is a simple factual query about the country where Calvin and Dave want to meet. A single, direct query using the key entities should retrieve the required information efficiently.
+[Planning] Generated 1 targeted queries
+[Search 1] Which country do Calvin and Dave want to meet in?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 29 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information type is the country where Calvin and Dave want to meet. Multiple pieces of information (e.g., Info 1, 2, 4, 8, 12, 20) indicate that Calvin and Dave plan to meet in Boston, which is a city in the United States. Therefore, the country is the United States, and the information is sufficient to answer the question.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What are Dave's dreams?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question is ambiguous because 'Dave' could refer to many individuals. To efficiently gather the required information, we need to first identify the specific Dave in context and then find his dreams. The original query is included as it directly asks for Dave's dreams, but it may need refinement based on context. A second query is added to disambiguate Dave by searching for his identity in relation to dreams, which can help narrow down the correct individual.
+[Planning] Generated 2 targeted queries
+[Search 1] What are Dave's dreams?
+[Search 2] Who is Dave with dreams?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 28 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The information identifies Dave as an individual who interacts with Calvin and provides specific details about Dave's dreams: opening a shop and working on classic cars. Multiple pieces of information consistently support these dreams, so both required information types (identity and content) are addressed with sufficient detail.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: When did Dave start his car maintenance shop?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question already contains the key entities and directly asks for the temporal information. Since the minimal queries needed is 1, the original query is sufficient to retrieve the required information without additional disambiguation queries.
+[Planning] Generated 1 targeted queries
+[Search 1] When did Dave start his car maintenance shop?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 27 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 60% - The available information indicates that Dave opened his car maintenance shop sometime before May 1, 2023, but does not provide the exact date or time period when he started the shop. While Dave is identified as 'Dave' and the shop is referenced, the specific start date is missing, which is the high-priority temporal information required to answer the question.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The exact date or time period when Dave started his car maintenance shop is not provided. The available information only indicates that the shop was already open by May 1, 2023, and that Dave mentioned it as a recent development. The full name of Dave and the name/location of the shop are also missing, which could help disambiguate and find the start date.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Dave car maintenance shop opening date
+[Additional Search 2] Dave auto repair shop grand opening 2023
+[Additional Search 3] Dave classic car restoration shop opened
+[Intelligent Reflection Round 1] Total results: 35
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 60% - The available information indicates that Dave opened his car maintenance shop sometime before May 1, 2023, but does not provide the exact date or time period when he started it. While Dave is identified as the person who opened the shop, and the shop is referenced, the specific start date is missing, which is the core of the question.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The exact date or time period when Dave started his car maintenance shop is not provided. The available information only indicates that the shop was opened sometime before May 1, 2023, when Dave announced it to Calvin. Additionally, Dave's full name and the name/location of the shop are not specified, which could help disambiguate and find more precise information.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Dave car maintenance shop opening date
+[Additional Search 2] Dave auto repair shop opened 2023
+[Additional Search 3] Dave classic car restoration shop Boston opening
+[Intelligent Reflection Round 2] Total results: 39
+
+[Planning] Analyzing information requirements for: Where did Calvin attend a music festival in April 2023?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question already contains the key entities and asks for the location. A single query with the original question should retrieve the answer. However, to ensure comprehensive coverage and confirm the temporal aspect, a second query focusing on the event and date is added. This minimal set of two queries balances efficiency and thoroughness.
+[Planning] Generated 2 targeted queries
+[Search 1] Where did Calvin attend a music festival in April 2023?
+[Search 2] Calvin music festival April 2023
+[Keyword Search] Found 5 results
+[Structured Search] Found 0 results
+[Planning] Found 29 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 40% - The available information mentions that Calvin attended a music event in Tokyo, but it does not confirm that it was a music festival or that it occurred in April 2023. The event could have been in March or earlier, and the exact location (city/venue) is not specified beyond 'Tokyo'. Thus, the required information types for event, location, and temporal are not fully satisfied.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Calvin attended a music event in Tokyo, but it does not specify the name of the festival, the exact location (city/venue), or confirm that it occurred in April 2023. The conversation on 20 April 2023 mentions the event as recent, but the date is not explicitly stated. The missing details are: the name of the music festival, its location, and confirmation of the April 2023 timeframe.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Calvin music festival Tokyo April 2023
+[Additional Search 2] Calvin attended music festival Tokyo 2023
+[Additional Search 3] Calvin Tokyo music event April 2023
+[Intelligent Reflection Round 1] Total results: 37
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 40% - The available information mentions that Calvin attended a music event in Tokyo, but it does not confirm that it was a music festival or that it occurred in April 2023. The event is referenced in conversations on 20 April 2023, but the actual date of the event is not specified. Additionally, the location is given as Tokyo, but without a specific venue or city confirmation. Therefore, the required information types for event, location, and temporal are not fully satisfied.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Calvin attended a music event in Tokyo, but it does not specify the name of the festival, the exact location (city or venue), or confirm that it occurred in April 2023. The event is mentioned in conversations on 20 April 2023, suggesting it happened shortly before, but the exact date is not provided.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Calvin Tokyo music festival April 2023
+[Additional Search 2] Calvin attended music festival Tokyo 2023
+[Additional Search 3] Calvin music event Tokyo April 2023
+[Intelligent Reflection Round 2] Total results: 37
+
+[Planning] Analyzing information requirements for: What advice did Calvin receive from the producer at the music festival?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question already captures the core relationship and entities. To efficiently gather all required information, we use the original query as a broad search, and add a more specific query targeting the advice content and interaction details to ensure we retrieve the exact advice and context.
+[Planning] Generated 2 targeted queries
+[Search 1] What advice did Calvin receive from the producer at the music festival?
+[Search 2] Calvin producer music festival advice conversation
+[Keyword Search] Found 5 results
+[Structured Search] Found 0 results
+[Planning] Found 28 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are all addressed: the event is identified as a music festival in Tokyo (Info 1, 14, 18), the interaction with a producer is described (Info 2), and the exact advice¡ªto stay true to himself and sound unique¡ªis provided (Info 2). Although the producer is not named, the question does not require that detail, so the information is sufficient for a comprehensive answer.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What advice did Calvin receive from the chef at the music festival?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. to stay true to himself and sound unique
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for specific advice Calvin received from a chef at a music festival. Since the answer must be based on a conversation, the most efficient approach is to search the conversation for mentions of Calvin, chef, music festival, and advice. A single query combining these key entities should retrieve the relevant information.
+[Planning] Generated 2 targeted queries
+[Search 1] What advice did Calvin receive from the chef at the music festival?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. to stay true to himself and sound unique
+[Search 2] Calvin chef music festival advice
+[Keyword Search] Found 5 results
+[Structured Search] Found 0 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What is Calvin's new business venture as of 1 May, 2023?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Car maintenance shop
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for Calvin's new business venture as of a specific date. The minimal query should include the key entities and the date to retrieve the most relevant information. Since the original question is already well-formed and specific, it serves as the single targeted query.
+[Planning] Generated 2 targeted queries
+[Search 1] What is Calvin's new business venture as of 1 May, 2023?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Car maintenance shop
+[Search 2] What is Calvin's new business venture as of 1 May, 2023?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 41 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What type of cars does Calvin work on at his shop?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. all kinds of cars, from regular maintenance to full restorations of classic cars
+[Planning] Identified 1 information requirements
+[Planning] Strategy: The question asks for the types of cars Calvin works on at his shop. The required information is an explicit statement about the types of cars. A single targeted query focusing on Calvin, his shop, and the types of cars he works on should retrieve the necessary information. Including the original question ensures coverage.
+[Planning] Generated 2 targeted queries
+[Search 1] What type of cars does Calvin work on at his shop?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. all kinds of cars, from regular maintenance to full restorations of classic cars
+[Search 2] What type of cars does Calvin work on at his shop?
+[Keyword Search] Found 5 results
+[Structured Search] Found 3 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+Using custom OpenAI base URL: https://api.deepseek.com
+{"conversation": "conv-50", "paired_questions": 9, "cumulative_run_cost_rmb": 13.9016}
+{"status": "completed", "run_cost_rmb": 13.901615999999999, "summary": {"systems": {"SimpleMem": {"n": 100, "correct": 81, "accuracy": 0.81, "input_tokens": 882720, "output_tokens": 54998, "provider_attempts": 573, "answer_cost_rmb": 2.6465087999999986, "build_cost_rmb": 6.1971144, "main_model_cost_rmb": 8.8436232, "cost_per_correct_answer_rmb": 0.10918053333333333, "latency_p50_ms": 5623.494750001555, "latency_p95_ms": 11885.92670000071, "by_category": {"adversarial": {"n": 25, "correct": 21, "accuracy": 0.84}, "multi-hop": {"n": 9, "correct": 3, "accuracy": 0.3333333333333333}, "open-domain": {"n": 28, "correct": 26, "accuracy": 0.9285714285714286}, "single-hop": {"n": 13, "correct": 9, "accuracy": 0.6923076923076923}, "temporal": {"n": 25, "correct": 22, "accuracy": 0.88}}}, "MemNexus": {"n": 100, "correct": 71, "accuracy": 0.71, "input_tokens": 432633, "output_tokens": 28999, "provider_attempts": 200, "answer_cost_rmb": 1.3167096000000003, "build_cost_rmb": 3.5626704, "main_model_cost_rmb": 4.87938, "cost_per_correct_answer_rmb": 0.068723661971831, "latency_p50_ms": 2699.0, "latency_p95_ms": 3832, "by_category": {"adversarial": {"n": 25, "correct": 24, "accuracy": 0.96}, "multi-hop": {"n": 9, "correct": 1, "accuracy": 0.1111111111111111}, "open-domain": {"n": 28, "correct": 20, "accuracy": 0.7142857142857143}, "single-hop": {"n": 13, "correct": 6, "accuracy": 0.46153846153846156}, "temporal": {"n": 25, "correct": 20, "accuracy": 0.8}}}}, "paired_accuracy_difference_mem_minus_simple": -0.1, "paired_bootstrap_95pct_ci": [-0.2, 0.0], "discordant_mem_only_correct": 9, "discordant_simple_only_correct": 19, "mcnemar_exact_two_sided_p": 0.08715855330228806}}

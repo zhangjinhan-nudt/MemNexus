@@ -1,0 +1,1213 @@
+{
+  "status": "completed",
+  "kind": "real-provider synthetic component ablation",
+  "prior_cumulative_upper_bound_rmb": 17.5110032,
+  "run_cap_rmb": 0.3,
+  "global_cap_rmb": 18,
+  "cases": [
+    {
+      "id": "year_boundary",
+      "speaker": "Inez",
+      "date": "2025-03-04",
+      "source": "I painted the mural last year.",
+      "memory": "Inez painted a mural last year.",
+      "subject": "Inez",
+      "question": "In which year did Inez paint the mural?",
+      "expected": [
+        "2024"
+      ]
+    },
+    {
+      "id": "month_rollover",
+      "speaker": "Salma",
+      "date": "2028-12-18",
+      "source": "My troupe is performing at the festival next month.",
+      "memory": "Salma's troupe will perform at the festival next month.",
+      "subject": "Salma",
+      "question": "In which month and year will Salma's troupe perform at the festival?",
+      "expected": [
+        "january",
+        "2029"
+      ]
+    },
+    {
+      "id": "weekend_interval",
+      "speaker": "Tariq",
+      "date": "2025-05-21",
+      "source": "I paddled through the gorge last weekend.",
+      "memory": "Tariq paddled through the gorge last weekend.",
+      "subject": "Tariq",
+      "question": "On which weekend did Tariq paddle through the gorge?",
+      "expected": [
+        "17",
+        "18",
+        "2025"
+      ]
+    },
+    {
+      "id": "omitted_detail",
+      "speaker": "Ren",
+      "date": "2024-04-07",
+      "source": "I bought a basalt paddle for the river race. What do you think?",
+      "memory": "Ren prepared equipment.",
+      "subject": "Ren",
+      "question": "What material was Ren's paddle made of?",
+      "expected": [
+        "basalt"
+      ]
+    },
+    {
+      "id": "speaker_misattribution",
+      "speaker": "Salma",
+      "date": "2024-07-16",
+      "source": "I use linen sails.",
+      "memory": "Arun uses linen sails.",
+      "subject": "Arun",
+      "question": "Who uses linen sails?",
+      "expected": [
+        "salma"
+      ]
+    },
+    {
+      "id": "unknown_supplier",
+      "speaker": "Kei",
+      "date": "2024-11-02",
+      "source": "My canoe is blue.",
+      "memory": "Kei has a blue canoe.",
+      "subject": "Kei",
+      "question": "Which supplier manufactured Kei's canoe?",
+      "expected": [
+        "unknown"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "case_id": "year_boundary",
+      "grounding_enabled": false,
+      "prediction": "I don't have enough information to determine the year. The evidence only states that Inez painted a mural \"last year,\" without specifying a calendar year【来源1】.",
+      "rule_check_passed": false,
+      "grounding": {
+        "enabled": false,
+        "initial_sources": 0,
+        "final_sources": 0,
+        "resolved_source_events": 0,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 0,
+        "elapsed_ms": 0.0
+      },
+      "sources": [
+        {
+          "content": "Inez painted a mural last year.",
+          "score": 0.5542077825096527,
+          "source_file": "[memory:mem_8df21dffeb194acbbf32d3354cbc4f8c]",
+          "chunk_id": "mem_8df21dffeb194acbbf32d3354cbc4f8c:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_8df21dffeb194acbbf32d3354cbc4f8c",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Inez",
+            "predicate": "event",
+            "value": "Inez painted a mural last year.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_524b5c656b4f4146ac6ed4d66f337e5a",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.5542077825096527,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:23.350546+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_0ddd63cb6fae4d90b26be8227612fd6a",
+                "event_index": 0,
+                "quote": "I painted the mural last year."
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 650,
+        "output_tokens": 35,
+        "cost_rmb": 0.001896
+      }
+    },
+    {
+      "case_id": "year_boundary",
+      "grounding_enabled": true,
+      "prediction": "Inez painted the mural in 2024. The statement \"last year\" was made on 2025-03-04, so it refers to 2024【来源1】.",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 1,
+        "final_sources": 1,
+        "resolved_source_events": 1,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "In which year did Inez paint the mural?"
+        ],
+        "supplemental_candidates": 1,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 524,
+        "elapsed_ms": 5.92940000933595
+      },
+      "sources": [
+        {
+          "content": "Inez painted a mural last year.",
+          "score": 0.5542077825096527,
+          "source_file": "[memory:mem_c9295d584c3647c3be7c5abb712ef324]",
+          "chunk_id": "mem_c9295d584c3647c3be7c5abb712ef324:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_c9295d584c3647c3be7c5abb712ef324",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Inez",
+            "predicate": "event",
+            "value": "Inez painted a mural last year.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_3c41bfd44af248a4945339a9f4b2d637",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.5542077825096527,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:24.573992+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_d00f670e464745d2b6fbea146a1d8796",
+                "event_index": 0,
+                "quote": "I painted the mural last year."
+              }
+            ],
+            "source_events": [
+              {
+                "turn_id": "turn_d00f670e464745d2b6fbea146a1d8796",
+                "event_index": 0,
+                "speaker": "Inez",
+                "role": "user",
+                "occurred_at": "2025-03-04T00:00:00+00:00",
+                "text": "I painted the mural last year.",
+                "start": 0,
+                "end": 30,
+                "context_only": false,
+                "time_derivations": [
+                  {
+                    "expression": "last year",
+                    "start": "2024-01-01",
+                    "end_exclusive": "2025-01-01",
+                    "precision": "year",
+                    "rule": "source_relative_year",
+                    "anchor": "2025-03-04T00:00:00+00:00",
+                    "span_start": 20,
+                    "span_end": 29
+                  }
+                ]
+              }
+            ],
+            "source_support_status": "resolved",
+            "origin": "compressed_memory"
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 1003,
+        "output_tokens": 39,
+        "cost_rmb": 0.0027815999999999995
+      }
+    },
+    {
+      "case_id": "month_rollover",
+      "grounding_enabled": true,
+      "prediction": "Salma's troupe will perform at the festival in January 2029【来源1】.",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 1,
+        "final_sources": 1,
+        "resolved_source_events": 1,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "In which month and year will Salma's troupe perform at the festival?"
+        ],
+        "supplemental_candidates": 1,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 573,
+        "elapsed_ms": 0.6905000191181898
+      },
+      "sources": [
+        {
+          "content": "Salma's troupe will perform at the festival next month.",
+          "score": 0.7630899762451745,
+          "source_file": "[memory:mem_0e9b0ff4443443218d74c1d6e6955a8b]",
+          "chunk_id": "mem_0e9b0ff4443443218d74c1d6e6955a8b:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_0e9b0ff4443443218d74c1d6e6955a8b",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Salma",
+            "predicate": "event",
+            "value": "Salma's troupe will perform at the festival next month.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_22a22ad46c2340eaa5866d54c6ab2e56",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.7630899762451745,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:25.510115+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_af1e6dcd08124225ae461fa9cad9bf1a",
+                "event_index": 0,
+                "quote": "My troupe is performing at the festival next month."
+              }
+            ],
+            "source_events": [
+              {
+                "turn_id": "turn_af1e6dcd08124225ae461fa9cad9bf1a",
+                "event_index": 0,
+                "speaker": "Salma",
+                "role": "user",
+                "occurred_at": "2028-12-18T00:00:00+00:00",
+                "text": "My troupe is performing at the festival next month.",
+                "start": 0,
+                "end": 51,
+                "context_only": false,
+                "time_derivations": [
+                  {
+                    "expression": "next month",
+                    "start": "2029-01-01",
+                    "end_exclusive": "2029-02-01",
+                    "precision": "month",
+                    "rule": "source_relative_month",
+                    "anchor": "2028-12-18T00:00:00+00:00",
+                    "span_start": 40,
+                    "span_end": 50
+                  }
+                ]
+              }
+            ],
+            "source_support_status": "resolved",
+            "origin": "compressed_memory"
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 1024,
+        "output_tokens": 20,
+        "cost_rmb": 0.0026495999999999994
+      }
+    },
+    {
+      "case_id": "month_rollover",
+      "grounding_enabled": false,
+      "prediction": "The available evidence only says the performance is “next month”【来源1】. It does not specify the month or year, so that detail cannot be determined from the provided information.",
+      "rule_check_passed": false,
+      "grounding": {
+        "enabled": false,
+        "initial_sources": 0,
+        "final_sources": 0,
+        "resolved_source_events": 0,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 0,
+        "elapsed_ms": 0.0
+      },
+      "sources": [
+        {
+          "content": "Salma's troupe will perform at the festival next month.",
+          "score": 0.7630899762451745,
+          "source_file": "[memory:mem_a974b90993bd494dbea86f2ffd923e49]",
+          "chunk_id": "mem_a974b90993bd494dbea86f2ffd923e49:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_a974b90993bd494dbea86f2ffd923e49",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Salma",
+            "predicate": "event",
+            "value": "Salma's troupe will perform at the festival next month.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_3fa6416997074507a132d3188c3104bd",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.7630899762451745,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:26.308616+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_e93df6963ea840ecaefe1967c0f9e449",
+                "event_index": 0,
+                "quote": "My troupe is performing at the festival next month."
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 662,
+        "output_tokens": 37,
+        "cost_rmb": 0.0019439999999999995
+      }
+    },
+    {
+      "case_id": "weekend_interval",
+      "grounding_enabled": false,
+      "prediction": "Tariq paddled through the gorge last weekend【来源1】.",
+      "rule_check_passed": false,
+      "grounding": {
+        "enabled": false,
+        "initial_sources": 0,
+        "final_sources": 0,
+        "resolved_source_events": 0,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 0,
+        "elapsed_ms": 0.0
+      },
+      "sources": [
+        {
+          "content": "Tariq paddled through the gorge last weekend.",
+          "score": 0.6210341762308488,
+          "source_file": "[memory:mem_71ce0c7a6b9d4ae28276a59988697d42]",
+          "chunk_id": "mem_71ce0c7a6b9d4ae28276a59988697d42:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_71ce0c7a6b9d4ae28276a59988697d42",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Tariq",
+            "predicate": "event",
+            "value": "Tariq paddled through the gorge last weekend.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_d03f4b0fba3647de8c0ae7fe896ae274",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.6210341762308488,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:27.563630+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_beb2dd348aed4996aa748b9f741963db",
+                "event_index": 0,
+                "quote": "I paddled through the gorge last weekend."
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 655,
+        "output_tokens": 15,
+        "cost_rmb": 0.0017160000000000005
+      }
+    },
+    {
+      "case_id": "weekend_interval",
+      "grounding_enabled": true,
+      "prediction": "Tariq paddled through the gorge on the weekend of May 17–18, 2025【来源1】.",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 1,
+        "final_sources": 1,
+        "resolved_source_events": 1,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 556,
+        "elapsed_ms": 0.5061000119894743
+      },
+      "sources": [
+        {
+          "content": "Tariq paddled through the gorge last weekend.",
+          "score": 0.6210341762308488,
+          "source_file": "[memory:mem_9138558f273b4fd9930c653c85f1588c]",
+          "chunk_id": "mem_9138558f273b4fd9930c653c85f1588c:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_9138558f273b4fd9930c653c85f1588c",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Tariq",
+            "predicate": "event",
+            "value": "Tariq paddled through the gorge last weekend.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_235114db0ad04aa8b27497293fc65122",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.6210341762308488,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:28.376724+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_eb9fe691e3df43e2a4615db53dc80ea9",
+                "event_index": 0,
+                "quote": "I paddled through the gorge last weekend."
+              }
+            ],
+            "source_events": [
+              {
+                "turn_id": "turn_eb9fe691e3df43e2a4615db53dc80ea9",
+                "event_index": 0,
+                "speaker": "Tariq",
+                "role": "user",
+                "occurred_at": "2025-05-21T00:00:00+00:00",
+                "text": "I paddled through the gorge last weekend.",
+                "start": 0,
+                "end": 41,
+                "context_only": false,
+                "time_derivations": [
+                  {
+                    "expression": "last weekend",
+                    "start": "2025-05-17",
+                    "end_exclusive": "2025-05-19",
+                    "precision": "weekend",
+                    "rule": "previous_iso_weekend",
+                    "anchor": "2025-05-21T00:00:00+00:00",
+                    "span_start": 28,
+                    "span_end": 40
+                  }
+                ]
+              }
+            ],
+            "source_support_status": "resolved",
+            "origin": "compressed_memory"
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 1011,
+        "output_tokens": 26,
+        "cost_rmb": 0.0026759999999999996
+      }
+    },
+    {
+      "case_id": "omitted_detail",
+      "grounding_enabled": true,
+      "prediction": "Basalt.【来源1】【来源2】",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 1,
+        "final_sources": 2,
+        "resolved_source_events": 1,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What material was Ren's paddle made of?",
+          "What material was Ren's paddle made of?"
+        ],
+        "supplemental_candidates": 1,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 1,
+        "initial_missing_info": [
+          "What material was Ren's paddle made of?"
+        ],
+        "final_missing_info": [
+          "What material was Ren's paddle made of?"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 790,
+        "elapsed_ms": 0.8787999977357686
+      },
+      "sources": [
+        {
+          "content": "Ren prepared equipment.",
+          "score": 0.3113288333112608,
+          "source_file": "[memory:mem_dc6c7f3950be4690bcb752a7c212f211]",
+          "chunk_id": "mem_dc6c7f3950be4690bcb752a7c212f211:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_dc6c7f3950be4690bcb752a7c212f211",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Ren",
+            "predicate": "event",
+            "value": "Ren prepared equipment.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_267b52468420429fbf8ebb45b67eca47",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.3113288333112608,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:29.178758+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_c39c345ba05a44a2996f8b58f8eb43e6",
+                "event_index": 0,
+                "quote": "I bought a basalt paddle for the river race. What do you think?"
+              }
+            ],
+            "source_events": [
+              {
+                "turn_id": "turn_c39c345ba05a44a2996f8b58f8eb43e6",
+                "event_index": 0,
+                "speaker": "Ren",
+                "role": "user",
+                "occurred_at": "2024-04-07T00:00:00+00:00",
+                "text": "I bought a basalt paddle for the river race. What do you think?",
+                "start": 0,
+                "end": 63,
+                "context_only": false,
+                "time_derivations": []
+              }
+            ],
+            "source_support_status": "resolved",
+            "origin": "compressed_memory"
+          }
+        },
+        {
+          "content": "I bought a basalt paddle for the river race. What do you think?",
+          "score": 0.22341079262214666,
+          "source_file": "[turn:turn_c39c345ba05a44a2996f8b58f8eb43e6]",
+          "chunk_id": "raw:turn_c39c345ba05a44a2996f8b58f8eb43e6:0:0",
+          "engine": "simple_memory",
+          "metadata": {
+            "origin": "raw_fallback",
+            "source_support_status": "resolved",
+            "source_events": [
+              {
+                "turn_id": "turn_c39c345ba05a44a2996f8b58f8eb43e6",
+                "event_index": 0,
+                "speaker": "Ren",
+                "role": "user",
+                "occurred_at": "2024-04-07T00:00:00+00:00",
+                "text": "I bought a basalt paddle for the river race. What do you think?",
+                "start": 0,
+                "end": 63,
+                "context_only": false,
+                "time_derivations": []
+              }
+            ],
+            "scope_type": "session",
+            "scope_id": "session_267b52468420429fbf8ebb45b67eca47",
+            "status": "active",
+            "assertion": "stated",
+            "evidence": [
+              {
+                "turn_id": "turn_c39c345ba05a44a2996f8b58f8eb43e6",
+                "event_index": 0,
+                "quote": "I bought a basalt paddle for the river race. What do you think?"
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 1070,
+        "output_tokens": 9,
+        "cost_rmb": 0.0026543999999999995
+      }
+    },
+    {
+      "case_id": "omitted_detail",
+      "grounding_enabled": false,
+      "prediction": "I don't have any information about what material Ren's paddle was made of. The only related evidence says Ren prepared equipment, but it doesn't mention a paddle or its material【来源1】.",
+      "rule_check_passed": false,
+      "grounding": {
+        "enabled": false,
+        "initial_sources": 0,
+        "final_sources": 0,
+        "resolved_source_events": 0,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 0,
+        "elapsed_ms": 0.0
+      },
+      "sources": [
+        {
+          "content": "Ren prepared equipment.",
+          "score": 0.3113288333112608,
+          "source_file": "[memory:mem_ee39fa355b3149b9856085b039393374]",
+          "chunk_id": "mem_ee39fa355b3149b9856085b039393374:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_ee39fa355b3149b9856085b039393374",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Ren",
+            "predicate": "event",
+            "value": "Ren prepared equipment.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_52ebba9f5a2943d2b70d201f67a2b402",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.3113288333112608,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:30.056249+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_7daeb325e6dd4af2a2394779d1d8da97",
+                "event_index": 0,
+                "quote": "I bought a basalt paddle for the river race. What do you think?"
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 644,
+        "output_tokens": 40,
+        "cost_rmb": 0.0019296
+      }
+    },
+    {
+      "case_id": "speaker_misattribution",
+      "grounding_enabled": false,
+      "prediction": "Arun uses linen sails. 【来源1】",
+      "rule_check_passed": false,
+      "grounding": {
+        "enabled": false,
+        "initial_sources": 0,
+        "final_sources": 0,
+        "resolved_source_events": 0,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 0,
+        "elapsed_ms": 0.0
+      },
+      "sources": [
+        {
+          "content": "Arun uses linen sails.",
+          "score": 0.542687503202186,
+          "source_file": "[memory:mem_aad485d1435a423a99f059c63b7caa7c]",
+          "chunk_id": "mem_aad485d1435a423a99f059c63b7caa7c:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_aad485d1435a423a99f059c63b7caa7c",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Arun",
+            "predicate": "event",
+            "value": "Arun uses linen sails.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_b2cb4853aa784fe8880069cc487ab4f4",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.542687503202186,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:30.937548+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_2abc0eb6a9e24a81a14db130f85e53a6",
+                "event_index": 0,
+                "quote": "I use linen sails."
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 633,
+        "output_tokens": 10,
+        "cost_rmb": 0.0016152000000000007
+      }
+    },
+    {
+      "case_id": "speaker_misattribution",
+      "grounding_enabled": true,
+      "prediction": "Salma uses linen sails.【来源1】",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 1,
+        "final_sources": 1,
+        "resolved_source_events": 1,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 1,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "Who uses linen sails?"
+        ],
+        "supplemental_candidates": 1,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 372,
+        "elapsed_ms": 1.1037999938707799
+      },
+      "sources": [
+        {
+          "content": "I use linen sails.",
+          "score": 0.542687503202186,
+          "source_file": "[memory:mem_885aaf5f475046e5a552f5063a68df7a]",
+          "chunk_id": "mem_885aaf5f475046e5a552f5063a68df7a:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_885aaf5f475046e5a552f5063a68df7a",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_be30b8f5a5f34b50b60fc58bcf3e1d05",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.542687503202186,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:31.805822+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_de57e1030bd541279fb70d28ce6e50f6",
+                "event_index": 0,
+                "quote": "I use linen sails."
+              }
+            ],
+            "source_events": [
+              {
+                "turn_id": "turn_de57e1030bd541279fb70d28ce6e50f6",
+                "event_index": 0,
+                "speaker": "Salma",
+                "role": "user",
+                "occurred_at": "2024-07-16T00:00:00+00:00",
+                "text": "I use linen sails.",
+                "start": 0,
+                "end": 18,
+                "context_only": false,
+                "time_derivations": []
+              }
+            ],
+            "source_support_status": "resolved",
+            "origin": "compressed_memory",
+            "attribution_conflict": true
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 942,
+        "output_tokens": 9,
+        "cost_rmb": 0.0023472000000000007
+      }
+    },
+    {
+      "case_id": "unknown_supplier",
+      "grounding_enabled": true,
+      "prediction": "The available evidence only says Kei's canoe is blue; it does not identify the manufacturer or supplier. So I can't answer which supplier manufactured it.",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 1,
+        "final_sources": 1,
+        "resolved_source_events": 1,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "Which supplier manufactured Kei's canoe?",
+          "Which supplier manufactured Kei's canoe?"
+        ],
+        "supplemental_candidates": 1,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [
+          "Which supplier manufactured Kei's canoe?"
+        ],
+        "final_missing_info": [
+          "Which supplier manufactured Kei's canoe?"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 342,
+        "elapsed_ms": 0.689499982399866
+      },
+      "sources": [
+        {
+          "content": "Kei has a blue canoe.",
+          "score": 0.45876746521530054,
+          "source_file": "[memory:mem_51f9a55485dc428a935a3d1c8e265c4c]",
+          "chunk_id": "mem_51f9a55485dc428a935a3d1c8e265c4c:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_51f9a55485dc428a935a3d1c8e265c4c",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Kei",
+            "predicate": "event",
+            "value": "Kei has a blue canoe.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_dd35b3c5b0e14666a29c3ca852cda1ff",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.45876746521530054,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:32.609523+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_16050fc743674a53be722f574cb87bc1",
+                "event_index": 0,
+                "quote": "My canoe is blue."
+              }
+            ],
+            "source_events": [
+              {
+                "turn_id": "turn_16050fc743674a53be722f574cb87bc1",
+                "event_index": 0,
+                "speaker": "Kei",
+                "role": "user",
+                "occurred_at": "2024-11-02T00:00:00+00:00",
+                "text": "My canoe is blue.",
+                "start": 0,
+                "end": 17,
+                "context_only": false,
+                "time_derivations": []
+              }
+            ],
+            "source_support_status": "resolved",
+            "origin": "compressed_memory"
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 941,
+        "output_tokens": 31,
+        "cost_rmb": 0.0025559999999999992
+      }
+    },
+    {
+      "case_id": "unknown_supplier",
+      "grounding_enabled": false,
+      "prediction": "I don't have information about which supplier manufactured Kei's canoe. The only related fact available is that Kei has a blue canoe【来源1】, but its manufacturer is not recorded.",
+      "rule_check_passed": true,
+      "grounding": {
+        "enabled": false,
+        "initial_sources": 0,
+        "final_sources": 0,
+        "resolved_source_events": 0,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 0,
+        "elapsed_ms": 0.0
+      },
+      "sources": [
+        {
+          "content": "Kei has a blue canoe.",
+          "score": 0.45876746521530054,
+          "source_file": "[memory:mem_a8b1e110e9864a1488cd16195cf0d8ee]",
+          "chunk_id": "mem_a8b1e110e9864a1488cd16195cf0d8ee:1",
+          "engine": "simple_memory",
+          "metadata": {
+            "memory_id": "mem_a8b1e110e9864a1488cd16195cf0d8ee",
+            "version": 1,
+            "revision": 1,
+            "tier": "short",
+            "assertion": "stated",
+            "kind": "fact",
+            "subject": "Kei",
+            "predicate": "event",
+            "value": "Kei has a blue canoe.",
+            "durable": false,
+            "scope_type": "session",
+            "scope_id": "session_26239ce560e0418687db13ff7827b32b",
+            "status": "active",
+            "valid_from": null,
+            "valid_to": null,
+            "matched_views": [
+              "lexical"
+            ],
+            "hierarchy_path": [],
+            "local_override": false,
+            "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
+            "support_memory_ids": [],
+            "rank_score": 0.45876746521530054,
+            "age_decay_applied": false,
+            "conflict_pending": [],
+            "recorded_at": "2026-10-12T05:00:33.520289+00:00",
+            "evidence": [
+              {
+                "turn_id": "turn_61ff4673e1ce4274b61fa577ac36b2e5",
+                "event_index": 0,
+                "quote": "My canoe is blue."
+              }
+            ]
+          }
+        }
+      ],
+      "usage": {
+        "provider_attempts": 1,
+        "provider_errors": 0,
+        "input_tokens": 640,
+        "output_tokens": 39,
+        "cost_rmb": 0.0019103999999999996
+      }
+    }
+  ],
+  "usage": {
+    "provider_attempts": 12,
+    "provider_errors": 0,
+    "input_tokens": 9875,
+    "output_tokens": 310,
+    "cost_rmb": 0.026676
+  },
+  "cumulative_upper_bound_rmb": 17.5376792
+}

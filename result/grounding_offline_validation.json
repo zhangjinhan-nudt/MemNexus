@@ -1,0 +1,1727 @@
+{
+  "kind": "offline raw fallback component validation; not answer accuracy",
+  "api_calls": 0,
+  "cost_rmb": 0,
+  "locomo_outside_development_100": {
+    "summary": {
+      "questions": 44,
+      "with_gold_evidence": 44,
+      "mean_evidence_recall_at_3": 0.4318181818181818,
+      "all_evidence_found": 19,
+      "p50_local_ms": 5.626500002108514,
+      "max_context_characters": 3016
+    },
+    "rows": [
+      {
+        "sample_id": "conv-26",
+        "qa_index": 85,
+        "gold_units": [
+          "D2:8"
+        ],
+        "retrieved_units": [
+          "D2:7",
+          "D1:16",
+          "D1:4"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 11.888900015037507,
+        "context_characters": 2206,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-26",
+        "qa_index": 86,
+        "gold_units": [
+          "D2:12"
+        ],
+        "retrieved_units": [
+          "D2:13",
+          "D2:12",
+          "D1:7"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 6.603699992410839,
+        "context_characters": 1777,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-26",
+        "qa_index": 87,
+        "gold_units": [
+          "D2:12"
+        ],
+        "retrieved_units": [
+          "D2:13",
+          "D2:12",
+          "D2:8"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 6.0394000029191375,
+        "context_characters": 1832,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-26",
+        "qa_index": 88,
+        "gold_units": [
+          "D2:14"
+        ],
+        "retrieved_units": [
+          "D2:13",
+          "D2:17",
+          "D2:7"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 5.899100011447445,
+        "context_characters": 2252,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-26",
+        "qa_index": 89,
+        "gold_units": [
+          "D2:15"
+        ],
+        "retrieved_units": [
+          "D1:13",
+          "D2:1",
+          "D2:4"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 7.135099993320182,
+        "context_characters": 2225,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-26",
+        "qa_index": 156,
+        "gold_units": [
+          "D2:14"
+        ],
+        "retrieved_units": [
+          "D2:13",
+          "D1:15",
+          "D1:13"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 5.1451000035740435,
+        "context_characters": 1736,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 8,
+        "gold_units": [
+          "D2:4"
+        ],
+        "retrieved_units": [
+          "D2:5",
+          "D2:13",
+          "D1:13"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 7.062399992719293,
+        "context_characters": 1924,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 40,
+        "gold_units": [
+          "D1:8"
+        ],
+        "retrieved_units": [
+          "D1:13",
+          "D1:7",
+          "D1:5"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 7.863099977839738,
+        "context_characters": 1748,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 41,
+        "gold_units": [
+          "D1:17"
+        ],
+        "retrieved_units": [
+          "D1:8",
+          "D2:7",
+          "D1:17"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 7.06130001344718,
+        "context_characters": 2197,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 42,
+        "gold_units": [
+          "D1:19"
+        ],
+        "retrieved_units": [
+          "D1:17",
+          "D1:16",
+          "D1:19"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 9.429300000192598,
+        "context_characters": 2694,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 43,
+        "gold_units": [
+          "D1:25"
+        ],
+        "retrieved_units": [
+          "D1:24",
+          "D1:19",
+          "D2:1"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 6.40350001049228,
+        "context_characters": 3016,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 44,
+        "gold_units": [
+          "D1:26"
+        ],
+        "retrieved_units": [
+          "D2:4",
+          "D1:8",
+          "D1:19"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 6.911100004799664,
+        "context_characters": 2679,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 45,
+        "gold_units": [
+          "D1:28"
+        ],
+        "retrieved_units": [
+          "D1:13",
+          "D1:28",
+          "D1:7"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 7.952699990710244,
+        "context_characters": 1732,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 46,
+        "gold_units": [
+          "D2:8"
+        ],
+        "retrieved_units": [
+          "D2:4",
+          "D2:8",
+          "D1:7"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 9.103900025365874,
+        "context_characters": 2641,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-30",
+        "qa_index": 86,
+        "gold_units": [
+          "D2:8"
+        ],
+        "retrieved_units": [
+          "D2:4",
+          "D2:7",
+          "D2:9"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 7.645600009709597,
+        "context_characters": 2623,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-41",
+        "qa_index": 68,
+        "gold_units": [
+          "D1:3"
+        ],
+        "retrieved_units": [
+          "D1:3",
+          "D1:4",
+          "D2:16"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 7.814699987648055,
+        "context_characters": 1944,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-41",
+        "qa_index": 69,
+        "gold_units": [
+          "D2:1"
+        ],
+        "retrieved_units": [
+          "D1:3",
+          "D1:16",
+          "D2:1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 7.537400000728667,
+        "context_characters": 2122,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-41",
+        "qa_index": 70,
+        "gold_units": [
+          "D2:24"
+        ],
+        "retrieved_units": [
+          "D2:23",
+          "D2:24",
+          "D2:15"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 10.710999980801716,
+        "context_characters": 2031,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-42",
+        "qa_index": 8,
+        "gold_units": [
+          "D2:12"
+        ],
+        "retrieved_units": [
+          "D2:15",
+          "D2:14",
+          "D1:3"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 7.383199990727007,
+        "context_characters": 2140,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-42",
+        "qa_index": 9,
+        "gold_units": [
+          "D2:3"
+        ],
+        "retrieved_units": [
+          "D2:28",
+          "D1:1",
+          "D1:3"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 5.527599976630881,
+        "context_characters": 1777,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-42",
+        "qa_index": 98,
+        "gold_units": [
+          "D2:5"
+        ],
+        "retrieved_units": [
+          "D1:3",
+          "D2:3",
+          "D2:2"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 6.391699978848919,
+        "context_characters": 2300,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-42",
+        "qa_index": 99,
+        "gold_units": [
+          "D2:7"
+        ],
+        "retrieved_units": [
+          "D2:3",
+          "D1:1",
+          "D1:3"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.991399997379631,
+        "context_characters": 2288,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-42",
+        "qa_index": 100,
+        "gold_units": [
+          "D2:12"
+        ],
+        "retrieved_units": [
+          "D1:2",
+          "D2:14",
+          "D1:4"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 5.619200004730374,
+        "context_characters": 1869,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-43",
+        "qa_index": 74,
+        "gold_units": [
+          "D1:16"
+        ],
+        "retrieved_units": [
+          "D1:2",
+          "D1:13",
+          "D1:15"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.933999996865168,
+        "context_characters": 2352,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-43",
+        "qa_index": 75,
+        "gold_units": [
+          "D2:1"
+        ],
+        "retrieved_units": [
+          "D1:1",
+          "D2:1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 3.843999991659075,
+        "context_characters": 1112,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-43",
+        "qa_index": 76,
+        "gold_units": [
+          "D2:9"
+        ],
+        "retrieved_units": [
+          "D2:9",
+          "D2:7",
+          "D1:1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 4.372099996544421,
+        "context_characters": 1954,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-44",
+        "qa_index": 8,
+        "gold_units": [
+          "D2:8"
+        ],
+        "retrieved_units": [
+          "D2:1",
+          "D1:1",
+          "D2:8"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 4.852399986702949,
+        "context_characters": 1986,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-47",
+        "qa_index": 70,
+        "gold_units": [
+          "D2:12"
+        ],
+        "retrieved_units": [
+          "D2:12",
+          "D2:10",
+          "D1:2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 6.547500001033768,
+        "context_characters": 1768,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-47",
+        "qa_index": 71,
+        "gold_units": [
+          "D2:19"
+        ],
+        "retrieved_units": [
+          "D2:20",
+          "D1:13",
+          "D2:21"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 6.23020000057295,
+        "context_characters": 1618,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 4,
+        "gold_units": [
+          "D1:8"
+        ],
+        "retrieved_units": [
+          "D1:8",
+          "D1:1",
+          "D2:25"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 5.155399994691834,
+        "context_characters": 1834,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 7,
+        "gold_units": [
+          "D1:8"
+        ],
+        "retrieved_units": [
+          "D1:8",
+          "D2:25",
+          "D2:17"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 4.50700000510551,
+        "context_characters": 2104,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 9,
+        "gold_units": [
+          "D2:1"
+        ],
+        "retrieved_units": [
+          "D2:2",
+          "D2:13",
+          "D1:5"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 5.633799999486655,
+        "context_characters": 1958,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 10,
+        "gold_units": [
+          "D2:3"
+        ],
+        "retrieved_units": [
+          "D2:3",
+          "D2:2",
+          "D2:5"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 5.001500016078353,
+        "context_characters": 2010,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 12,
+        "gold_units": [
+          "D2:7"
+        ],
+        "retrieved_units": [
+          "D2:17",
+          "D2:2",
+          "D1:13"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.664600011892617,
+        "context_characters": 2071,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 17,
+        "gold_units": [
+          "D2:24"
+        ],
+        "retrieved_units": [
+          "D2:22",
+          "D2:25",
+          "D2:17"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.604999994626269,
+        "context_characters": 2133,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 21,
+        "gold_units": [
+          "D2:30"
+        ],
+        "retrieved_units": [
+          "D2:30",
+          "D2:26",
+          "D2:17"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 4.704600025434047,
+        "context_characters": 2593,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 78,
+        "gold_units": [
+          "D2:1"
+        ],
+        "retrieved_units": [
+          "D2:17",
+          "D2:26",
+          "D2:25"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.844300012337044,
+        "context_characters": 2349,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 100,
+        "gold_units": [
+          "D1:2"
+        ],
+        "retrieved_units": [
+          "D1:2",
+          "D2:25",
+          "D1:1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 4.259300010744482,
+        "context_characters": 1967,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-48",
+        "qa_index": 101,
+        "gold_units": [
+          "D2:24"
+        ],
+        "retrieved_units": [
+          "D2:22",
+          "D2:25",
+          "D2:17"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.5609999797306955,
+        "context_characters": 2133,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-49",
+        "qa_index": 86,
+        "gold_units": [
+          "D1:18"
+        ],
+        "retrieved_units": [
+          "D2:12",
+          "D1:16",
+          "D2:9"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 5.3708000050392,
+        "context_characters": 2010,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-49",
+        "qa_index": 87,
+        "gold_units": [
+          "D2:1"
+        ],
+        "retrieved_units": [
+          "D2:2",
+          "D1:2",
+          "D2:4"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.516600019996986,
+        "context_characters": 1868,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-49",
+        "qa_index": 88,
+        "gold_units": [
+          "D2:3"
+        ],
+        "retrieved_units": [
+          "D2:2",
+          "D2:4",
+          "D2:1"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.6113000134937465,
+        "context_characters": 2572,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-49",
+        "qa_index": 159,
+        "gold_units": [
+          "D2:1"
+        ],
+        "retrieved_units": [
+          "D2:1",
+          "D2:17",
+          "D2:2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 4.775100009283051,
+        "context_characters": 2395,
+        "rounds": 1
+      },
+      {
+        "sample_id": "conv-49",
+        "qa_index": 160,
+        "gold_units": [
+          "D2:3"
+        ],
+        "retrieved_units": [
+          "D2:2",
+          "D2:11",
+          "D2:1"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 4.718800017144531,
+        "context_characters": 2950,
+        "rounds": 1
+      }
+    ]
+  },
+  "longmemeval_s_hash_selected_50": {
+    "summary": {
+      "questions": 50,
+      "with_gold_evidence": 50,
+      "mean_evidence_recall_at_3": 0.73,
+      "all_evidence_found": 27,
+      "p50_local_ms": 163.82879999582656,
+      "max_context_characters": 4640
+    },
+    "rows": [
+      {
+        "question_id": "gpt4_b5700ca9",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 537,
+        "gold_units": [
+          "answer_a17423e7_1"
+        ],
+        "retrieved_units": [
+          "answer_a17423e7_1",
+          "ultrachat_134591",
+          "ultrachat_46958"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 84.06169997761026,
+        "context_characters": 2610,
+        "rounds": 1
+      },
+      {
+        "question_id": "a96c20ee",
+        "question_type": "multi-session",
+        "raw_turns": 489,
+        "gold_units": [
+          "answer_ef84b994_1",
+          "answer_ef84b994_2"
+        ],
+        "retrieved_units": [
+          "answer_ef84b994_1",
+          "answer_ef84b994_2",
+          "answer_ef84b994_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 185.36750000203028,
+        "context_characters": 2585,
+        "rounds": 1
+      },
+      {
+        "question_id": "b29f3365",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 494,
+        "gold_units": [
+          "answer_436d4309_1",
+          "answer_436d4309_2"
+        ],
+        "retrieved_units": [
+          "answer_436d4309_1",
+          "answer_436d4309_1",
+          "88e01130_1"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 87.03400002559647,
+        "context_characters": 3266,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_1d4ab0c9",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 483,
+        "gold_units": [
+          "answer_febde667_1",
+          "answer_febde667_2"
+        ],
+        "retrieved_units": [
+          "answer_febde667_2",
+          "feb9e0c3_2",
+          "ultrachat_310433"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 646.029900002759,
+        "context_characters": 2396,
+        "rounds": 1
+      },
+      {
+        "question_id": "fea54f57",
+        "question_type": "single-session-assistant",
+        "raw_turns": 527,
+        "gold_units": [
+          "answer_ultrachat_187684"
+        ],
+        "retrieved_units": [
+          "answer_ultrachat_187684",
+          "0ed2559d",
+          "0aa99e2e_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 582.298900000751,
+        "context_characters": 4640,
+        "rounds": 1
+      },
+      {
+        "question_id": "f4f1d8a4_abs",
+        "question_type": "single-session-user",
+        "raw_turns": 506,
+        "gold_units": [
+          "answer_f5b33470_abs"
+        ],
+        "retrieved_units": [
+          "answer_f5b33470_abs",
+          "f252001e",
+          "1dd13331_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 321.53369998559356,
+        "context_characters": 3557,
+        "rounds": 1
+      },
+      {
+        "question_id": "c4ea545c",
+        "question_type": "knowledge-update",
+        "raw_turns": 490,
+        "gold_units": [
+          "answer_d3bf812b_1",
+          "answer_d3bf812b_2"
+        ],
+        "retrieved_units": [
+          "answer_d3bf812b_1",
+          "a1f43f8d_2",
+          "sharegpt_I0uNTjm_16"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 165.52589999628253,
+        "context_characters": 3108,
+        "rounds": 1
+      },
+      {
+        "question_id": "09ba9854",
+        "question_type": "multi-session",
+        "raw_turns": 479,
+        "gold_units": [
+          "answer_96c743d0_1",
+          "answer_96c743d0_2"
+        ],
+        "retrieved_units": [
+          "answer_96c743d0_2",
+          "ultrachat_362951",
+          "answer_96c743d0_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 179.8512999957893,
+        "context_characters": 2208,
+        "rounds": 1
+      },
+      {
+        "question_id": "efc3f7c2",
+        "question_type": "multi-session",
+        "raw_turns": 497,
+        "gold_units": [
+          "answer_fc81d1a2_1",
+          "answer_fc81d1a2_2"
+        ],
+        "retrieved_units": [
+          "answer_fc81d1a2_2",
+          "ultrachat_164840",
+          "answer_fc81d1a2_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 169.19260000577196,
+        "context_characters": 2557,
+        "rounds": 1
+      },
+      {
+        "question_id": "e66b632c",
+        "question_type": "knowledge-update",
+        "raw_turns": 506,
+        "gold_units": [
+          "answer_ac0140ce_1",
+          "answer_ac0140ce_2"
+        ],
+        "retrieved_units": [
+          "answer_ac0140ce_2",
+          "answer_ac0140ce_1",
+          "answer_ac0140ce_2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 126.91729998914525,
+        "context_characters": 4161,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_8c8961ae",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 485,
+        "gold_units": [
+          "answer_72d9aa58_1",
+          "answer_72d9aa58_2"
+        ],
+        "retrieved_units": [
+          "answer_72d9aa58_1",
+          "3b22d17b",
+          "answer_72d9aa58_2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 186.81549999746494,
+        "context_characters": 3127,
+        "rounds": 1
+      },
+      {
+        "question_id": "89527b6b",
+        "question_type": "single-session-assistant",
+        "raw_turns": 467,
+        "gold_units": [
+          "answer_sharegpt_YkWn1Ne_0"
+        ],
+        "retrieved_units": [
+          "answer_sharegpt_YkWn1Ne_0",
+          "ultrachat_554469",
+          "sharegpt_M9T66Xd_5"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 230.05740001099184,
+        "context_characters": 3695,
+        "rounds": 1
+      },
+      {
+        "question_id": "6456829e_abs",
+        "question_type": "multi-session",
+        "raw_turns": 494,
+        "gold_units": [
+          "answer_743f03a1_abs_1",
+          "answer_743f03a1_abs_2"
+        ],
+        "retrieved_units": [
+          "answer_743f03a1_abs_1",
+          "b61cc91b_2",
+          "3d8d4828_2"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 162.13169999537058,
+        "context_characters": 3323,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_6dc9b45b",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 565,
+        "gold_units": [
+          "answer_c4df007f_1"
+        ],
+        "retrieved_units": [
+          "answer_c4df007f_1",
+          "sharegpt_jyynvvk_0",
+          "56911dc5_2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 126.35360000422224,
+        "context_characters": 2545,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_59c863d7",
+        "question_type": "multi-session",
+        "raw_turns": 481,
+        "gold_units": [
+          "answer_593bdffd_1",
+          "answer_593bdffd_2",
+          "answer_593bdffd_3",
+          "answer_593bdffd_4"
+        ],
+        "retrieved_units": [
+          "answer_593bdffd_1",
+          "ultrachat_307895",
+          "a7d014e4_1"
+        ],
+        "evidence_recall_at_3": 0.25,
+        "all_evidence_found": false,
+        "elapsed_ms": 260.50609999219887,
+        "context_characters": 2321,
+        "rounds": 1
+      },
+      {
+        "question_id": "118b2229",
+        "question_type": "single-session-user",
+        "raw_turns": 485,
+        "gold_units": [
+          "answer_40a90d51"
+        ],
+        "retrieved_units": [
+          "answer_40a90d51",
+          "db73b7e4_4",
+          "79f74d4e_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 126.80209998507053,
+        "context_characters": 2156,
+        "rounds": 1
+      },
+      {
+        "question_id": "ec81a493",
+        "question_type": "single-session-user",
+        "raw_turns": 495,
+        "gold_units": [
+          "answer_ed1982fc"
+        ],
+        "retrieved_units": [
+          "answer_ed1982fc",
+          "ultrachat_413665",
+          "answer_ed1982fc"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 208.94159999443218,
+        "context_characters": 2539,
+        "rounds": 1
+      },
+      {
+        "question_id": "a1eacc2a",
+        "question_type": "knowledge-update",
+        "raw_turns": 474,
+        "gold_units": [
+          "answer_0eb23770_1",
+          "answer_0eb23770_2"
+        ],
+        "retrieved_units": [
+          "answer_0eb23770_1",
+          "ultrachat_194474",
+          "answer_0eb23770_2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 141.40530000440776,
+        "context_characters": 2684,
+        "rounds": 1
+      },
+      {
+        "question_id": "58bf7951",
+        "question_type": "single-session-user",
+        "raw_turns": 616,
+        "gold_units": [
+          "answer_355c48bb"
+        ],
+        "retrieved_units": [
+          "answer_355c48bb",
+          "sharegpt_gmLF3PE_17",
+          "answer_355c48bb"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 825.7257000077516,
+        "context_characters": 2829,
+        "rounds": 1
+      },
+      {
+        "question_id": "6b7dfb22",
+        "question_type": "single-session-preference",
+        "raw_turns": 471,
+        "gold_units": [
+          "answer_f6502d0f"
+        ],
+        "retrieved_units": [
+          "9ee69ca6_3",
+          "fd418106_3",
+          "answer_f6502d0f"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 476.4143999782391,
+        "context_characters": 3372,
+        "rounds": 1
+      },
+      {
+        "question_id": "58ef2f1c",
+        "question_type": "single-session-user",
+        "raw_turns": 518,
+        "gold_units": [
+          "answer_59547700"
+        ],
+        "retrieved_units": [
+          "answer_59547700",
+          "13f3da23_3",
+          "e6ab6a7b_2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 155.26309999404475,
+        "context_characters": 2672,
+        "rounds": 1
+      },
+      {
+        "question_id": "488d3006",
+        "question_type": "single-session-assistant",
+        "raw_turns": 509,
+        "gold_units": [
+          "answer_ultrachat_275993"
+        ],
+        "retrieved_units": [
+          "answer_ultrachat_275993",
+          "82b82901",
+          "a394f6b5_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 435.79280000994913,
+        "context_characters": 4303,
+        "rounds": 1
+      },
+      {
+        "question_id": "41698283",
+        "question_type": "knowledge-update",
+        "raw_turns": 476,
+        "gold_units": [
+          "answer_c7ddc051_1",
+          "answer_c7ddc051_2"
+        ],
+        "retrieved_units": [
+          "answer_c7ddc051_1",
+          "0e8ba03b_1",
+          "6ff9e355"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 118.82679999689572,
+        "context_characters": 3620,
+        "rounds": 1
+      },
+      {
+        "question_id": "19b5f2b3_abs",
+        "question_type": "single-session-user",
+        "raw_turns": 527,
+        "gold_units": [
+          "answer_5ff494b9_abs"
+        ],
+        "retrieved_units": [
+          "sharegpt_G9RAbBH_0",
+          "answer_5ff494b9_abs",
+          "sharegpt_d0i4rE2_0"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 142.38380000460893,
+        "context_characters": 2860,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_d9af6064",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 534,
+        "gold_units": [
+          "answer_da704e79_1",
+          "answer_da704e79_2"
+        ],
+        "retrieved_units": [
+          "answer_da704e79_1",
+          "answer_da704e79_1",
+          "sharegpt_VbIxRWJ_33"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 171.86149998451583,
+        "context_characters": 2996,
+        "rounds": 1
+      },
+      {
+        "question_id": "69fee5aa",
+        "question_type": "knowledge-update",
+        "raw_turns": 483,
+        "gold_units": [
+          "answer_d6028d6e_1",
+          "answer_d6028d6e_2"
+        ],
+        "retrieved_units": [
+          "answer_d6028d6e_2",
+          "ultrachat_152449",
+          "answer_d6028d6e_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 161.14340000785887,
+        "context_characters": 2491,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_2f91af09",
+        "question_type": "multi-session",
+        "raw_turns": 515,
+        "gold_units": [
+          "answer_669318cf_1",
+          "answer_669318cf_2",
+          "answer_669318cf_3"
+        ],
+        "retrieved_units": [
+          "answer_669318cf_3",
+          "22b3af37_1",
+          "sharegpt_kuYqYGw_87"
+        ],
+        "evidence_recall_at_3": 0.3333333333333333,
+        "all_evidence_found": false,
+        "elapsed_ms": 141.26020000549033,
+        "context_characters": 3604,
+        "rounds": 1
+      },
+      {
+        "question_id": "b46e15ee",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 457,
+        "gold_units": [
+          "answer_4bfcc251_1",
+          "answer_4bfcc251_2",
+          "answer_4bfcc251_3",
+          "answer_4bfcc251_4"
+        ],
+        "retrieved_units": [
+          "answer_4bfcc251_1",
+          "f3fcf4fd_1",
+          "c92239bc"
+        ],
+        "evidence_recall_at_3": 0.25,
+        "all_evidence_found": false,
+        "elapsed_ms": 523.8963000010699,
+        "context_characters": 3340,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_59149c77",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 484,
+        "gold_units": [
+          "answer_d00ba6d0_1",
+          "answer_d00ba6d0_2"
+        ],
+        "retrieved_units": [
+          "answer_d00ba6d0_2",
+          "9e2c2a6c_2",
+          "sharegpt_7DwoMJg_7"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 344.81330000562593,
+        "context_characters": 3989,
+        "rounds": 1
+      },
+      {
+        "question_id": "e493bb7c",
+        "question_type": "knowledge-update",
+        "raw_turns": 506,
+        "gold_units": [
+          "answer_1a374afa_1",
+          "answer_1a374afa_2"
+        ],
+        "retrieved_units": [
+          "answer_1a374afa_2",
+          "ultrachat_216405",
+          "9161500f_2"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 133.56109999585897,
+        "context_characters": 2506,
+        "rounds": 1
+      },
+      {
+        "question_id": "c4a1ceb8",
+        "question_type": "multi-session",
+        "raw_turns": 488,
+        "gold_units": [
+          "answer_56d02cab_1",
+          "answer_56d02cab_2",
+          "answer_56d02cab_3",
+          "answer_56d02cab_4"
+        ],
+        "retrieved_units": [
+          "answer_56d02cab_2",
+          "answer_56d02cab_3",
+          "ultrachat_285068"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 139.41269999486394,
+        "context_characters": 2491,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_1a1dc16d",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 453,
+        "gold_units": [
+          "answer_faad7d7a_1",
+          "answer_faad7d7a_2"
+        ],
+        "retrieved_units": [
+          "answer_faad7d7a_2",
+          "answer_faad7d7a_1",
+          "c82c18dd_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 639.1849000065122,
+        "context_characters": 3886,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_59149c78",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 497,
+        "gold_units": [
+          "answer_d00ba6d1_1",
+          "answer_d00ba6d1_2"
+        ],
+        "retrieved_units": [
+          "23754665",
+          "a8ac3d1d_1",
+          "23754665"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 393.3258000179194,
+        "context_characters": 2802,
+        "rounds": 1
+      },
+      {
+        "question_id": "15745da0",
+        "question_type": "single-session-user",
+        "raw_turns": 474,
+        "gold_units": [
+          "answer_586de428"
+        ],
+        "retrieved_units": [
+          "answer_586de428",
+          "sharegpt_f28uI6i_0",
+          "07d33eaa"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 216.3126999803353,
+        "context_characters": 2190,
+        "rounds": 1
+      },
+      {
+        "question_id": "61f8c8f8",
+        "question_type": "multi-session",
+        "raw_turns": 459,
+        "gold_units": [
+          "answer_872e8da2_1",
+          "answer_872e8da2_2"
+        ],
+        "retrieved_units": [
+          "answer_872e8da2_1",
+          "2154c810_1",
+          "sharegpt_7jGo66i_99"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 144.40599997760728,
+        "context_characters": 2456,
+        "rounds": 1
+      },
+      {
+        "question_id": "bf659f65",
+        "question_type": "multi-session",
+        "raw_turns": 516,
+        "gold_units": [
+          "answer_7726e7e9_1",
+          "answer_7726e7e9_2",
+          "answer_7726e7e9_3"
+        ],
+        "retrieved_units": [
+          "answer_7726e7e9_1",
+          "ultrachat_209740",
+          "sharegpt_8cFNcVG_0"
+        ],
+        "evidence_recall_at_3": 0.3333333333333333,
+        "all_evidence_found": false,
+        "elapsed_ms": 154.82900000642985,
+        "context_characters": 3354,
+        "rounds": 1
+      },
+      {
+        "question_id": "603deb26",
+        "question_type": "knowledge-update",
+        "raw_turns": 472,
+        "gold_units": [
+          "answer_8afdebac_1",
+          "answer_8afdebac_2"
+        ],
+        "retrieved_units": [
+          "answer_8afdebac_2",
+          "sharegpt_z6pSZ19_0",
+          "58e5adf2"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 111.99109998415224,
+        "context_characters": 3461,
+        "rounds": 1
+      },
+      {
+        "question_id": "22d2cb42",
+        "question_type": "knowledge-update",
+        "raw_turns": 473,
+        "gold_units": [
+          "answer_bcce0b73_1",
+          "answer_bcce0b73_2"
+        ],
+        "retrieved_units": [
+          "answer_bcce0b73_1",
+          "answer_bcce0b73_1",
+          "answer_bcce0b73_1"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 272.17740000924096,
+        "context_characters": 2865,
+        "rounds": 1
+      },
+      {
+        "question_id": "2698e78f",
+        "question_type": "knowledge-update",
+        "raw_turns": 478,
+        "gold_units": [
+          "answer_9282283d_1",
+          "answer_9282283d_2"
+        ],
+        "retrieved_units": [
+          "answer_9282283d_2",
+          "sharegpt_I6IzvEF_60",
+          "answer_9282283d_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 161.60870000021532,
+        "context_characters": 3696,
+        "rounds": 1
+      },
+      {
+        "question_id": "8550ddae",
+        "question_type": "single-session-user",
+        "raw_turns": 453,
+        "gold_units": [
+          "answer_c8354ae9"
+        ],
+        "retrieved_units": [
+          "answer_c8354ae9",
+          "71cf5aeb_3",
+          "a7189b75"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 183.93589998595417,
+        "context_characters": 3773,
+        "rounds": 1
+      },
+      {
+        "question_id": "85fa3a3f",
+        "question_type": "multi-session",
+        "raw_turns": 493,
+        "gold_units": [
+          "answer_dcb18b9b_1",
+          "answer_dcb18b9b_2"
+        ],
+        "retrieved_units": [
+          "answer_dcb18b9b_1",
+          "answer_dcb18b9b_2",
+          "answer_dcb18b9b_2"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 120.13359999400564,
+        "context_characters": 2611,
+        "rounds": 1
+      },
+      {
+        "question_id": "e25c3b8d",
+        "question_type": "multi-session",
+        "raw_turns": 530,
+        "gold_units": [
+          "answer_6702277b_1",
+          "answer_6702277b_2"
+        ],
+        "retrieved_units": [
+          "answer_6702277b_2",
+          "sharegpt_Nk10TjE_29",
+          "sharegpt_40qcQLS_17"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 155.6882000004407,
+        "context_characters": 1754,
+        "rounds": 1
+      },
+      {
+        "question_id": "3fe836c9",
+        "question_type": "multi-session",
+        "raw_turns": 449,
+        "gold_units": [
+          "answer_1bb63ea5_1",
+          "answer_1bb63ea5_2"
+        ],
+        "retrieved_units": [
+          "answer_1bb63ea5_2",
+          "ultrachat_154042",
+          "answer_1bb63ea5_1"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 132.7504999935627,
+        "context_characters": 2385,
+        "rounds": 1
+      },
+      {
+        "question_id": "58470ed2",
+        "question_type": "single-session-assistant",
+        "raw_turns": 471,
+        "gold_units": [
+          "answer_sharegpt_U4oCSfU_7"
+        ],
+        "retrieved_units": [
+          "4a324955",
+          "sharegpt_oPOTyid_141",
+          "sharegpt_6QUDIXG_104"
+        ],
+        "evidence_recall_at_3": 0.0,
+        "all_evidence_found": false,
+        "elapsed_ms": 124.8628000030294,
+        "context_characters": 3365,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_1e4a8aec",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 498,
+        "gold_units": [
+          "answer_16bd5ea6_1",
+          "answer_16bd5ea6_2"
+        ],
+        "retrieved_units": [
+          "4c8455cb_2",
+          "sharegpt_sRhcMiu_0",
+          "answer_16bd5ea6_2"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 127.11770000169054,
+        "context_characters": 2544,
+        "rounds": 1
+      },
+      {
+        "question_id": "4c36ccef",
+        "question_type": "single-session-assistant",
+        "raw_turns": 521,
+        "gold_units": [
+          "answer_ultrachat_448704"
+        ],
+        "retrieved_units": [
+          "answer_ultrachat_448704",
+          "answer_ultrachat_448704",
+          "sharegpt_gqkL2Dr_0"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 424.3473999958951,
+        "context_characters": 3544,
+        "rounds": 1
+      },
+      {
+        "question_id": "gpt4_a56e767c",
+        "question_type": "multi-session",
+        "raw_turns": 477,
+        "gold_units": [
+          "answer_cf9e3940_1",
+          "answer_cf9e3940_2",
+          "answer_cf9e3940_3"
+        ],
+        "retrieved_units": [
+          "answer_cf9e3940_3",
+          "ultrachat_181843",
+          "7a819e6f_1"
+        ],
+        "evidence_recall_at_3": 0.3333333333333333,
+        "all_evidence_found": false,
+        "elapsed_ms": 266.1710999964271,
+        "context_characters": 3392,
+        "rounds": 1
+      },
+      {
+        "question_id": "d851d5ba",
+        "question_type": "multi-session",
+        "raw_turns": 533,
+        "gold_units": [
+          "answer_5cdf9bd2_1",
+          "answer_5cdf9bd2_2",
+          "answer_5cdf9bd2_3",
+          "answer_5cdf9bd2_4"
+        ],
+        "retrieved_units": [
+          "answer_5cdf9bd2_1",
+          "sharegpt_0gZVK1A_15",
+          "answer_5cdf9bd2_3"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 743.3906000223942,
+        "context_characters": 2355,
+        "rounds": 1
+      },
+      {
+        "question_id": "c9f37c46",
+        "question_type": "temporal-reasoning",
+        "raw_turns": 511,
+        "gold_units": [
+          "answer_cdba3d9f_1",
+          "answer_cdba3d9f_2"
+        ],
+        "retrieved_units": [
+          "answer_cdba3d9f_2",
+          "answer_cdba3d9f_1",
+          "sharegpt_94CjWOc_0"
+        ],
+        "evidence_recall_at_3": 1.0,
+        "all_evidence_found": true,
+        "elapsed_ms": 149.10760000930168,
+        "context_characters": 3018,
+        "rounds": 1
+      },
+      {
+        "question_id": "184da446",
+        "question_type": "knowledge-update",
+        "raw_turns": 473,
+        "gold_units": [
+          "answer_e2f4f947_1",
+          "answer_e2f4f947_2"
+        ],
+        "retrieved_units": [
+          "answer_e2f4f947_2",
+          "bf633415_2",
+          "ultrachat_195877"
+        ],
+        "evidence_recall_at_3": 0.5,
+        "all_evidence_found": false,
+        "elapsed_ms": 136.1398000153713,
+        "context_characters": 2886,
+        "rounds": 1
+      }
+    ]
+  },
+  "limitations": [
+    "No compressed-memory input in this component test",
+    "Sparse retrieval only",
+    "LoCoMo uses turn-level evidence, LongMemEval uses session-level evidence",
+    "LoCoMo D1-D2 horizon is evidence-selected, not a full-history result"
+  ]
+}

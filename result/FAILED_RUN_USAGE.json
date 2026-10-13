@@ -1,0 +1,22 @@
+{
+  "purpose": "Conservative accounting for aborted development runs; not quality data",
+  "initial_run": {
+    "failure": "SimpleMem telemetry client local-variable regression before provider request",
+    "provider_calls": 0,
+    "quality_rows": 0,
+    "accounted_upper_bound_rmb": 0.0
+  },
+  "parser_run": {
+    "failure": "SimpleMem extraction response was truncated at max_tokens and rejected as incomplete top-level array",
+    "provider_attempts": 6,
+    "input_tokens": 8958,
+    "output_tokens": 12288,
+    "measured_cost_rmb": 0.139464,
+    "quality_rows": 0
+  },
+  "empty_response_run": {
+    "failure": "SimpleMem did not disable DeepSeek thinking and returned empty extraction content",
+    "quality_rows": 0,
+    "accounted_upper_bound_rmb": 3.5
+  }
+}

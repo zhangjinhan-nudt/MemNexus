@@ -1,0 +1,1670 @@
+{
+  "run": "result\\locomo_100_disjoint_v2_complete.json",
+  "wrong_count": 29,
+  "stage_counts": {
+    "gold_source_partially_covered": 6,
+    "gold_source_referenced_in_memory_but_not_selected": 12,
+    "gold_sources_present_answer_or_inference_failed": 9,
+    "gold_source_not_referenced_by_memory": 1,
+    "negative_answer_or_judge": 1
+  },
+  "cases": [
+    {
+      "sample_id": "conv-26",
+      "qa_index": 14,
+      "category_id": 3,
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "gold_answer": "Likely no",
+      "MemNexus_prediction": "The memory doesn't contain any counterfactual statement from Caroline about whether she would still pursue counseling without the support she received growing up, so this can't be answered directly.\n\nWhat is recorded: Caroline said her own journey and the support she received made a huge difference, and that seeing how counseling and support groups improved her life led her to care more about mental health and want to help others through similar experiences【来源4】. She also said the pride parade motivated her to use her story to help others, and that she was still thinking counseling and mental health was the way to go【来源6】. Her stated career interest in counseling and mental health is also on record【来源1】.\n\nThese establish that support was part of her motivation, but they don't tell us what she would have wanted in a hypothetical where that support was absent.",
+      "SimpleMem_prediction": "Likely yes, but context does not explicitly state this; her motivation is tied to her own journey and support.",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction refuses to answer and does not provide the gold answer 'Likely no'; it fails to make the required counterfactual inference.",
+      "triage_stage": "gold_source_partially_covered",
+      "gold_evidence": [
+        "D4:15",
+        "D3:5"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-26",
+        "qa_index": 14,
+        "gold_count": 2,
+        "retrieved_count": 6,
+        "any_gold": true,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "inference",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 6,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+          "Caroline's stated motivations for wanting to become a counselor"
+        ],
+        "supplemental_candidates": 80,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Caroline's stated motivations for wanting to become a counselor"
+        ],
+        "final_missing_info": [
+          "Evidence of support Caroline received or lacked while growing up",
+          "Caroline's stated motivations for wanting to become a counselor"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 4172,
+        "elapsed_ms": 17.692199999146396
+      },
+      "citations": [
+        1,
+        4,
+        6
+      ]
+    },
+    {
+      "sample_id": "conv-26",
+      "qa_index": 85,
+      "category_id": 4,
+      "question": "What are Caroline's plans for the summer?",
+      "gold_answer": "researching adoption agencies",
+      "MemNexus_prediction": "Caroline's recorded summer plans are limited: she said she was going to a transgender conference in July 2023, where she was excited to meet others in the community and learn more about advocacy【来源7】. No other summer-specific plans or activities from Caroline appear in the evidence.",
+      "SimpleMem_prediction": "Researching adoption agencies, attending a transgender conference in July 2023, and pursuing counseling/mental health",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction does not mention researching adoption agencies, which is the gold answer, and instead discusses a transgender conference, contradicting the required core fact.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D2:8"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-26",
+        "qa_index": 85,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 7,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What are Caroline's plans for the summer?",
+          "Any activities, events, or goals Caroline mentioned for summer"
+        ],
+        "supplemental_candidates": 80,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Any activities, events, or goals Caroline mentioned for summer"
+        ],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 4,
+        "context_tokens_estimate": 4962,
+        "elapsed_ms": 17.244300001038937
+      },
+      "citations": [
+        7
+      ]
+    },
+    {
+      "sample_id": "conv-26",
+      "qa_index": 86,
+      "category_id": 4,
+      "question": "What type of individuals does the adoption agency Caroline is considering support?",
+      "gold_answer": "LGBTQ+ individuals",
+      "MemNexus_prediction": "The evidence doesn't specify what type of individuals the adoption agency Caroline is considering supports. It only shows she is looking into an agency and that her goal is to give kids a loving home【来源5】.",
+      "SimpleMem_prediction": "LGBTQ+ folks",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the gold answer 'LGBTQ+ individuals' and instead claims the information is not specified.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D2:12"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-26",
+        "qa_index": 86,
+        "gold_count": 1,
+        "retrieved_count": 6,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 6,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What type of individuals does the adoption agency Caroline is considering support?",
+          "Types of individuals (e.g., age groups, backgrounds, special needs) that agency supports for adoption"
+        ],
+        "supplemental_candidates": 80,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Types of individuals (e.g., age groups, backgrounds, special needs) that agency supports for adoption"
+        ],
+        "final_missing_info": [
+          "Types of individuals (e.g., age groups, backgrounds, special needs) that agency supports for adoption"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4898,
+        "elapsed_ms": 16.458800000691554
+      },
+      "citations": [
+        5
+      ]
+    },
+    {
+      "sample_id": "conv-41",
+      "qa_index": 3,
+      "category_id": 1,
+      "question": "What type of volunteering have John and Maria both done?",
+      "gold_answer": "Volunteering at a homeless shelter",
+      "MemNexus_prediction": "No shared type of volunteering is supported by the evidence. Maria has volunteered at a homeless shelter【来源1】【来源7】, including a kids’ event there【来源5】. The evidence does not show John doing any volunteering.",
+      "SimpleMem_prediction": "Volunteering at a homeless shelter",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction denies any shared volunteering and states John has no volunteering evidence, contradicting the gold answer that both volunteered at a homeless shelter.",
+      "triage_stage": "gold_source_partially_covered",
+      "gold_evidence": [
+        "D3:5",
+        "D2:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-41",
+        "qa_index": 3,
+        "gold_count": 2,
+        "retrieved_count": 7,
+        "any_gold": true,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "relation",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 2,
+        "context_tokens_estimate": 4622,
+        "elapsed_ms": 1.9745999998121988
+      },
+      "citations": [
+        1,
+        5,
+        7
+      ]
+    },
+    {
+      "sample_id": "conv-41",
+      "qa_index": 8,
+      "category_id": 3,
+      "question": "What might John's financial status be?",
+      "gold_answer": "Middle-class or wealthy",
+      "MemNexus_prediction": "I don't have any information about John's employment, income, or financial situation. The available evidence covers his interest in local politics, education and infrastructure, and community work, but nothing about his finances.",
+      "SimpleMem_prediction": "John appears financially comfortable, as his kids have so much while others don't.",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction does not provide the gold answer 'Middle-class or wealthy' and instead states no information is available.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D5:5"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-41",
+        "qa_index": 8,
+        "gold_count": 1,
+        "retrieved_count": 8,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "inference",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 8,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What might John's financial status be?",
+          "John's current employment or income source",
+          "John's stated financial situation or concerns",
+          "Any prior statements about John's job, salary, or money"
+        ],
+        "supplemental_candidates": 88,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "John's current employment or income source",
+          "John's stated financial situation or concerns",
+          "Any prior statements about John's job, salary, or money",
+          "Any changes to John's financial circumstances over time"
+        ],
+        "final_missing_info": [
+          "John's current employment or income source"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 2,
+        "context_tokens_estimate": 4959,
+        "elapsed_ms": 16.91240000218386
+      },
+      "citations": []
+    },
+    {
+      "sample_id": "conv-41",
+      "qa_index": 69,
+      "category_id": 4,
+      "question": "What did Maria donate to a homeless shelter in December 2023?",
+      "gold_answer": "old car",
+      "MemNexus_prediction": "Maria donated her old car to a homeless shelter【来源1】. The donation was made on December 21, 2022, not December 2023【来源1】. The specific shelter is not named in the evidence.",
+      "SimpleMem_prediction": "No donation in December 2023 is mentioned; Maria donated her old car on 21 December 2022.",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction states the donation occurred in December 2022, contradicting the question's December 2023 timeframe, and does not affirm the gold answer for the specified date.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D2:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-41",
+        "qa_index": 69,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What did Maria donate to a homeless shelter in December 2023?",
+          "Confirmation that the donation occurred in December 2023"
+        ],
+        "supplemental_candidates": 83,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Confirmation that the donation occurred in December 2023"
+        ],
+        "final_missing_info": [
+          "Confirmation that the donation occurred in December 2023"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 2,
+        "context_tokens_estimate": 4528,
+        "elapsed_ms": 17.043899999407586
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-42",
+      "qa_index": 8,
+      "category_id": 2,
+      "question": "When did Nate get his first two turtles?",
+      "gold_answer": "2019",
+      "MemNexus_prediction": "I don't have any record of when Nate got his first two turtles. The evidence mentions Nate keeping turtles and sharing photos of them, but no date or time period for acquiring them is stated.",
+      "SimpleMem_prediction": "Around 23 January 2019",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the gold answer '2019' and instead states no date is known.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D2:12"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-42",
+        "qa_index": 8,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "temporal",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 7,
+        "resolved_source_events": 7,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "When did Nate get his first two turtles?",
+          "The date or time period when Nate acquired his first two turtles"
+        ],
+        "supplemental_candidates": 80,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "The date or time period when Nate acquired his first two turtles"
+        ],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 2,
+        "context_tokens_estimate": 4590,
+        "elapsed_ms": 18.66620000146213
+      },
+      "citations": []
+    },
+    {
+      "sample_id": "conv-42",
+      "qa_index": 9,
+      "category_id": 2,
+      "question": "What major achievement did Joanna accomplish in January 2022?",
+      "gold_answer": "finished her screenplay and printed it",
+      "MemNexus_prediction": "I don't have evidence of a major achievement by Joanna in January 2022. The recorded achievements are from later: she wrapped up her second script and had submitted a screenplay to a film festival, both mentioned in March 2022【来源7】【来源3】.",
+      "SimpleMem_prediction": "Finished her first full screenplay on 21 January 2022",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction denies the January 2022 achievement and does not state that Joanna finished and printed her screenplay, contradicting the gold answer.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D2:3"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-42",
+        "qa_index": 9,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What major achievement did Joanna accomplish in January 2022?",
+          "The specific major achievement Joanna accomplished",
+          "Any supporting context identifying Joanna and the nature of the achievement"
+        ],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [
+          "The specific major achievement Joanna accomplished",
+          "Any supporting context identifying Joanna and the nature of the achievement"
+        ],
+        "final_missing_info": [
+          "The specific major achievement Joanna accomplished",
+          "Any supporting context identifying Joanna and the nature of the achievement"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 2,
+        "context_tokens_estimate": 4292,
+        "elapsed_ms": 2.6007000014942605
+      },
+      "citations": [
+        3,
+        7
+      ]
+    },
+    {
+      "sample_id": "conv-42",
+      "qa_index": 10,
+      "category_id": 1,
+      "question": "What emotions is Joanna feeling about  the screenplay she submitted?",
+      "gold_answer": "Relief, excitement,worry, hope,anxiety.",
+      "MemNexus_prediction": "Joanna has described feeling a mix of relief, excitement, and worry about the screenplay she submitted to the film festival, with it constantly on her mind【来源3】【来源7】. She has also said she feels a mix of excitement and terror about her work getting noticed and hitting the big screen【来源5】.",
+      "SimpleMem_prediction": "Relief, excitement, and anxiety",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction omits the gold-answer emotions 'hope' and 'anxiety' and adds 'terror,' which is not in the gold answer.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D2:7",
+        "D3:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-42",
+        "qa_index": 10,
+        "gold_count": 2,
+        "retrieved_count": 6,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 7,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What emotions is Joanna feeling about  the screenplay she submitted?",
+          "Context of the screenplay submission and its outcome"
+        ],
+        "supplemental_candidates": 72,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Context of the screenplay submission and its outcome"
+        ],
+        "final_missing_info": [
+          "Context of the screenplay submission and its outcome"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 4739,
+        "elapsed_ms": 14.902499999152496
+      },
+      "citations": [
+        3,
+        5,
+        7
+      ]
+    },
+    {
+      "sample_id": "conv-42",
+      "qa_index": 11,
+      "category_id": 1,
+      "question": "What is Joanna allergic to?",
+      "gold_answer": "Most reptiles,animals with fur,cockroaches, dairy",
+      "MemNexus_prediction": "Joanna is allergic to most reptiles and animals with fur, and she also found out she is allergic to cockroaches.【来源5】【来源6】",
+      "SimpleMem_prediction": "Most reptiles, animals with fur, cockroaches, and dairy",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction omits dairy, which is a core fact in the gold answer.",
+      "triage_stage": "gold_source_partially_covered",
+      "gold_evidence": [
+        "D4:4",
+        "D5:11",
+        "D2:23"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-42",
+        "qa_index": 11,
+        "gold_count": 3,
+        "retrieved_count": 8,
+        "any_gold": true,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "set",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 9,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What is Joanna allergic to?",
+          "The specific allergen(s) Joanna is allergic to",
+          "Any context about how the allergy was mentioned (food, medication, environmental)"
+        ],
+        "supplemental_candidates": 72,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "The specific allergen(s) Joanna is allergic to",
+          "Any context about how the allergy was mentioned (food, medication, environmental)"
+        ],
+        "final_missing_info": [
+          "Any context about how the allergy was mentioned (food, medication, environmental)"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4230,
+        "elapsed_ms": 15.757799999846611
+      },
+      "citations": [
+        5,
+        6
+      ]
+    },
+    {
+      "sample_id": "conv-42",
+      "qa_index": 12,
+      "category_id": 3,
+      "question": "What underlying condition might Joanna have based on her allergies?",
+      "gold_answer": "asthma",
+      "MemNexus_prediction": "No underlying condition is established by the evidence. Joanna has disclosed allergies to certain animals and to cockroaches, with symptoms of facial puffiness and itching, and says she doesn't know if she'll ever get a pet because of them【来源2】【来源5】【来源8】. She also cannot have dairy【来源6】. These are stated allergies/intolerances, but no diagnosis or named underlying condition is given, so any specific condition would be speculation.",
+      "SimpleMem_prediction": "Not explicitly stated in the context",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction fails to provide the gold answer 'asthma' and instead states no underlying condition is established, contradicting the expected answer.",
+      "triage_stage": "gold_source_partially_covered",
+      "gold_evidence": [
+        "D5:11",
+        "D2:23"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-42",
+        "qa_index": 12,
+        "gold_count": 2,
+        "retrieved_count": 8,
+        "any_gold": true,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "inference",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 8,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What underlying condition might Joanna have based on her allergies?",
+          "Any medical conditions, symptoms, or diagnoses Joanna has disclosed"
+        ],
+        "supplemental_candidates": 72,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Any medical conditions, symptoms, or diagnoses Joanna has disclosed"
+        ],
+        "final_missing_info": [
+          "Any medical conditions, symptoms, or diagnoses Joanna has disclosed"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4468,
+        "elapsed_ms": 16.741499999625375
+      },
+      "citations": [
+        2,
+        5,
+        6,
+        8
+      ]
+    },
+    {
+      "sample_id": "conv-43",
+      "qa_index": 6,
+      "category_id": 2,
+      "question": "In which month's game did John achieve a career-high score in points?",
+      "gold_answer": "June 2023",
+      "MemNexus_prediction": "John achieved his career-high 40 points in a game during July 2023 — he described it as happening \"last week\" in a July 16, 2023 conversation, placing it in the week of July 3–10, 2023【来源1】.",
+      "SimpleMem_prediction": "July 2023",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction states July 2023, while the gold answer is June 2023.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D3:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-43",
+        "qa_index": 6,
+        "gold_count": 1,
+        "retrieved_count": 6,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "set",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 6,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "In which month's game did John achieve a career-high score in points?",
+          "The specific game and points value establishing the career high"
+        ],
+        "supplemental_candidates": 57,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "The specific game and points value establishing the career high"
+        ],
+        "final_missing_info": [
+          "The specific game and points value establishing the career high"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 4,
+        "context_tokens_estimate": 4639,
+        "elapsed_ms": 18.349800000578398
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-43",
+      "qa_index": 11,
+      "category_id": 1,
+      "question": "What sports does John like besides basketball?",
+      "gold_answer": "surfing",
+      "MemNexus_prediction": "I don't have a record of any sports John likes besides basketball. The evidence shows he was considering sports brands like Nike and Under Armour for endorsement collaborations, but that doesn't establish which sports he personally likes【来源1】.",
+      "SimpleMem_prediction": "Surfing",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the gold answer 'surfing' and instead states no record of other sports, which contradicts the gold answer.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D1:7",
+        "D2:14",
+        "D3:1",
+        "D3:25"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-43",
+        "qa_index": 11,
+        "gold_count": 4,
+        "retrieved_count": 8,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "set",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 8,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4638,
+        "elapsed_ms": 2.1799000023747794
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-43",
+      "qa_index": 15,
+      "category_id": 3,
+      "question": "Who is Anthony?",
+      "gold_answer": "likely John's friend, colleague or family",
+      "MemNexus_prediction": "Anthony is mentioned only as someone who attended a charity event with John and took part in a Harry Potter trivia contest there【来源3】. The available evidence does not establish Anthony's identity, role, or relationship to John or Tim beyond that.",
+      "SimpleMem_prediction": "Anthony is a person who went with John to a charity event and took part in a Harry Potter trivia contest.",
+      "SimpleMem_correct": false,
+      "judge_reason": "The gold answer states Anthony is likely John's friend, colleague, or family, while the prediction explicitly denies establishing any relationship to John, contradicting the gold answer.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D4:8"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-43",
+        "qa_index": 15,
+        "gold_count": 1,
+        "retrieved_count": 6,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 6,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 3973,
+        "elapsed_ms": 1.4561999996658415
+      },
+      "citations": [
+        3
+      ]
+    },
+    {
+      "sample_id": "conv-43",
+      "qa_index": 74,
+      "category_id": 4,
+      "question": "What aspects of the Harry Potter universe will be discussed in John's fan project collaborations?",
+      "gold_answer": "characters, spells, magical creatures",
+      "MemNexus_prediction": "I don't have any record of John having a Harry Potter fan project or collaborations. The fan project discussing characters, spells, and magical creatures belongs to Tim, not John【来源1】. There's no evidence about aspects covered in any fan project of John's.",
+      "SimpleMem_prediction": "Characters, spells, and magical creatures",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction denies knowledge of John's fan project and attributes the described aspects to Tim, contradicting the gold answer that John's project covers characters, spells, and magical creatures.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D1:16"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-43",
+        "qa_index": 74,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 7,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What aspects of the Harry Potter universe will be discussed in John's fan project collaborations?",
+          "Whether any prior conversation or memory records John's fan project details"
+        ],
+        "supplemental_candidates": 57,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Whether any prior conversation or memory records John's fan project details"
+        ],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4826,
+        "elapsed_ms": 16.918799999984913
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-43",
+      "qa_index": 76,
+      "category_id": 4,
+      "question": "What kind of picture did Tim share as part of their Harry Potter book collection?",
+      "gold_answer": "MinaLima's creation from the Harry Potter films",
+      "MemNexus_prediction": "Tim shared a photo of a bookshelf with books and a picture on it, as part of his book collection【来源1】.",
+      "SimpleMem_prediction": "A picture from MinaLima, the company that created Harry Potter film props",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction describes a generic bookshelf photo and does not identify the picture as MinaLima's creation from the Harry Potter films, missing the core fact of the gold answer.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D2:9"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-43",
+        "qa_index": 76,
+        "gold_count": 1,
+        "retrieved_count": 6,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 6,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What kind of picture did Tim share as part of their Harry Potter book collection?",
+          "Whether the picture depicts books, shelves, artwork, or another item"
+        ],
+        "supplemental_candidates": 57,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Whether the picture depicts books, shelves, artwork, or another item"
+        ],
+        "final_missing_info": [
+          "The context in which Tim shared the picture (conversation or session)",
+          "Whether the picture depicts books, shelves, artwork, or another item"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 3993,
+        "elapsed_ms": 13.90940000055707
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-44",
+      "qa_index": 5,
+      "category_id": 2,
+      "question": "When did Audrey see a hummingbird?",
+      "gold_answer": "first week of May 2023",
+      "MemNexus_prediction": "Audrey saw the hummingbird during a hike in the week before May 3, 2023 — she described it as \"last week,\" placing it around April 24–30, 2023【来源1】.",
+      "SimpleMem_prediction": "During the week before 3 May 2023",
+      "SimpleMem_correct": true,
+      "judge_reason": "Gold answer is the first week of May 2023, but the prediction places the sighting around April 24–30, 2023, which contradicts the gold timeframe.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D4:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-44",
+        "qa_index": 5,
+        "gold_count": 1,
+        "retrieved_count": 8,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "temporal",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 8,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "When did Audrey see a hummingbird?"
+        ],
+        "supplemental_candidates": 69,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4555,
+        "elapsed_ms": 16.28770000024815
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-47",
+      "qa_index": 4,
+      "category_id": 2,
+      "question": "When did John resume playing drums in his adulthood?",
+      "gold_answer": "February 2022",
+      "MemNexus_prediction": "I don't have evidence about when John resumed playing drums in adulthood. The only drum-related fact recorded is that John plays drums and has a drum kit set【来源4】, with no timing or reason for resuming.",
+      "SimpleMem_prediction": "About a month before 27 March 2022",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the gold answer 'February 2022' and instead states it lacks evidence, so it does not correctly answer the question.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D3:5"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-47",
+        "qa_index": 4,
+        "gold_count": 1,
+        "retrieved_count": 9,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "temporal",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 9,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "When did John resume playing drums in his adulthood?",
+          "Whether John played drums earlier in life before resuming",
+          "Any event or reason associated with John resuming drums"
+        ],
+        "supplemental_candidates": 77,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Whether John played drums earlier in life before resuming",
+          "Any event or reason associated with John resuming drums"
+        ],
+        "final_missing_info": [
+          "Any event or reason associated with John resuming drums"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 4791,
+        "elapsed_ms": 18.234600000141654
+      },
+      "citations": [
+        4
+      ]
+    },
+    {
+      "sample_id": "conv-47",
+      "qa_index": 5,
+      "category_id": 1,
+      "question": "What are John and James' favorite games?",
+      "gold_answer": "John's favorite game is CS:GO, and James's is Apex Legends.",
+      "MemNexus_prediction": "John's favorite game is CS:GO【来源1】. There's no record of James's favorite game; he's mentioned getting into RPGs and strategy games, but that's not stated as a favorite【来源2】.",
+      "SimpleMem_prediction": "John's favorite game is CS:GO, and James's favorite game is Apex Legends.",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction omits James's favorite game (Apex Legends) and instead says there is no record of it, contradicting the gold answer.",
+      "triage_stage": "gold_source_partially_covered",
+      "gold_evidence": [
+        "D3:11",
+        "D4:16"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-47",
+        "qa_index": 5,
+        "gold_count": 2,
+        "retrieved_count": 6,
+        "any_gold": true,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 6,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 3134,
+        "elapsed_ms": 1.1028000008082017
+      },
+      "citations": [
+        1,
+        2
+      ]
+    },
+    {
+      "sample_id": "conv-47",
+      "qa_index": 6,
+      "category_id": 3,
+      "question": "Does James live in Connecticut?",
+      "gold_answer": "Likely yes",
+      "MemNexus_prediction": "I don't have any information about where James lives, so I can't confirm whether he lives in Connecticut.",
+      "SimpleMem_prediction": "Not mentioned in the context",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction does not answer the question and contradicts the gold answer 'Likely yes' by stating it cannot confirm.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D5:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-47",
+        "qa_index": 6,
+        "gold_count": 1,
+        "retrieved_count": 9,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 9,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "Does James live in Connecticut?",
+          "Whether James's residence is in Connecticut"
+        ],
+        "supplemental_candidates": 73,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Whether James's residence is in Connecticut"
+        ],
+        "final_missing_info": [
+          "Whether James's residence is in Connecticut"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 4872,
+        "elapsed_ms": 19.320600000355626
+      },
+      "citations": []
+    },
+    {
+      "sample_id": "conv-47",
+      "qa_index": 7,
+      "category_id": 3,
+      "question": "In which state is the shelter from which James adopted the puppy?",
+      "gold_answer": "Connecticut.",
+      "MemNexus_prediction": "The shelter is in Stamford, but the evidence does not specify which state it is in【来源1】.",
+      "SimpleMem_prediction": "Connecticut",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the state (Connecticut) and instead claims the state is unspecified, contradicting the gold answer.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D5:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-47",
+        "qa_index": 7,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "set",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 3873,
+        "elapsed_ms": 1.985000002605375
+      },
+      "citations": [
+        1
+      ]
+    },
+    {
+      "sample_id": "conv-47",
+      "qa_index": 8,
+      "category_id": 1,
+      "question": "How many pets does James have?",
+      "gold_answer": "Three dogs.",
+      "MemNexus_prediction": "I don't have any record of James owning pets, so I can't give a number. The evidence mentions James proposing a dog-walking and pet-care app【来源8】and discussing pets generally, but nothing states that James has pets of his own.",
+      "SimpleMem_prediction": "James has three pets: dogs Max and Daisy, and a puppy named Ned.",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the gold answer of three dogs and instead states it cannot give a number, contradicting the gold answer.",
+      "triage_stage": "gold_source_partially_covered",
+      "gold_evidence": [
+        "D1:12",
+        "D1:14",
+        "D5:1"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-47",
+        "qa_index": 8,
+        "gold_count": 3,
+        "retrieved_count": 10,
+        "any_gold": true,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "count",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 10,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "How many pets does James have?"
+        ],
+        "supplemental_candidates": 73,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 2,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 4942,
+        "elapsed_ms": 33.72710000257939
+      },
+      "citations": [
+        8
+      ]
+    },
+    {
+      "sample_id": "conv-47",
+      "qa_index": 72,
+      "category_id": 4,
+      "question": "What instrument is John learning to play as of 27 March, 2022?",
+      "gold_answer": "Drums",
+      "MemNexus_prediction": "There is no evidence that John is learning to play an instrument as of 27 March 2022. The records show John plays drums and has a drum kit【来源5】, but that is not the same as learning a new instrument. The only person recorded as learning an instrument around that date is James, who started learning drums a few days before 27 March 2022【来源1】【来源7】.",
+      "SimpleMem_prediction": "Drums",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction denies that John is learning an instrument, contradicting the gold answer that John is learning drums.",
+      "triage_stage": "gold_sources_present_answer_or_inference_failed",
+      "gold_evidence": [
+        "D3:2",
+        "D3:3"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-47",
+        "qa_index": 72,
+        "gold_count": 2,
+        "retrieved_count": 7,
+        "any_gold": true,
+        "all_gold": true,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 7,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What instrument is John learning to play as of 27 March, 2022?",
+          "Evidence dated on or before 27 March 2022 establishing this fact"
+        ],
+        "supplemental_candidates": 35,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Evidence dated on or before 27 March 2022 establishing this fact"
+        ],
+        "final_missing_info": [
+          "Evidence dated on or before 27 March 2022 establishing this fact"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4305,
+        "elapsed_ms": 9.838199999649078
+      },
+      "citations": [
+        1,
+        5,
+        7
+      ]
+    },
+    {
+      "sample_id": "conv-48",
+      "qa_index": 23,
+      "category_id": 3,
+      "question": "Why did Jolene sometimes put off doing yoga?",
+      "gold_answer": "She's more interested in playing video games",
+      "MemNexus_prediction": "I don't have any record of Jolene giving a reason for putting off yoga, or of specific times she delayed it. The available evidence doesn't cover this.",
+      "SimpleMem_prediction": "Not mentioned in the context",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction fails to provide the gold answer that Jolene put off yoga because she was more interested in playing video games.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D3:11",
+        "D2:30"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-48",
+        "qa_index": 23,
+        "gold_count": 2,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "count",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "Why did Jolene sometimes put off doing yoga?",
+          "Specific reasons Jolene gave for sometimes putting off yoga",
+          "Context or circumstances in which she delayed yoga",
+          "Whether the reason is recurring or one-time"
+        ],
+        "supplemental_candidates": 64,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Specific reasons Jolene gave for sometimes putting off yoga",
+          "Context or circumstances in which she delayed yoga",
+          "Whether the reason is recurring or one-time"
+        ],
+        "final_missing_info": [
+          "Specific reasons Jolene gave for sometimes putting off yoga",
+          "Context or circumstances in which she delayed yoga",
+          "Whether the reason is recurring or one-time"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4658,
+        "elapsed_ms": 16.596399997069966
+      },
+      "citations": []
+    },
+    {
+      "sample_id": "conv-48",
+      "qa_index": 25,
+      "category_id": 4,
+      "question": "What are Jolene's favorite books?",
+      "gold_answer": "Sapiens, Avalanche by Neal Stephenson",
+      "MemNexus_prediction": "I don't have any record of Jolene's favorite books, specific titles, authors, or genres. The only book-related detail is that she shared a photo of her bookshelf【来源2】, which doesn't indicate preferences.",
+      "SimpleMem_prediction": "Sapiens and Avalanche by Neal Stephenson",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction fails to provide the gold answer titles and instead claims no record of Jolene's favorite books.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D4:21",
+        "D4:23"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-48",
+        "qa_index": 25,
+        "gold_count": 2,
+        "retrieved_count": 6,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 6,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What are Jolene's favorite books?",
+          "Any titles, authors, or genres Jolene mentioned liking"
+        ],
+        "supplemental_candidates": 64,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Any titles, authors, or genres Jolene mentioned liking"
+        ],
+        "final_missing_info": [
+          "Any titles, authors, or genres Jolene mentioned liking"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 3815,
+        "elapsed_ms": 15.362300000560936
+      },
+      "citations": [
+        2
+      ]
+    },
+    {
+      "sample_id": "conv-49",
+      "qa_index": 86,
+      "category_id": 4,
+      "question": "What advice did Evan give Sam about finding a passion?",
+      "gold_answer": "keep trying new things until something sparks excitement",
+      "MemNexus_prediction": "Evan advised finding a fitness routine you really enjoy, making it fun, and finding little ways to make smarter diet choices—adding up over time【来源3】. He also said to find something that motivates you and makes you happy, whether large or tiny, to help conquer struggles【来源4】. This was given in earlier conversations, not the current session.",
+      "SimpleMem_prediction": "Keep trying new things until something sparks excitement",
+      "SimpleMem_correct": true,
+      "judge_reason": "The prediction discusses fitness routines and diet choices, not the gold answer's advice to keep trying new things until something sparks excitement.",
+      "triage_stage": "gold_source_not_referenced_by_memory",
+      "gold_evidence": [
+        "D1:18"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-49",
+        "qa_index": 86,
+        "gold_count": 1,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": false,
+        "memory_all_gold": false,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 6,
+        "final_sources": 7,
+        "resolved_source_events": 6,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What advice did Evan give Sam about finding a passion?",
+          "Whether the advice was given in the current session or an earlier conversation",
+          "The context in which the advice was offered"
+        ],
+        "supplemental_candidates": 99,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Whether the advice was given in the current session or an earlier conversation",
+          "The context in which the advice was offered"
+        ],
+        "final_missing_info": [
+          "Whether the advice was given in the current session or an earlier conversation",
+          "The context in which the advice was offered"
+        ],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 3630,
+        "elapsed_ms": 14.707000002090354
+      },
+      "citations": [
+        3,
+        4
+      ]
+    },
+    {
+      "sample_id": "conv-49",
+      "qa_index": 161,
+      "category_id": 5,
+      "question": "What habit is Evan trying to change in terms of diet?",
+      "gold_answer": "Not mentioned in the conversation",
+      "MemNexus_prediction": "B. consuming soda and candy\n\nEvan said he was trying to eat less processed food and sugary snacks, and he specifically mentioned loving ginger snaps while cutting back on sugary snacks【来源2】.",
+      "SimpleMem_prediction": "Not mentioned in the conversation",
+      "SimpleMem_correct": true,
+      "judge_reason": "The gold answer states the habit is not mentioned, but the prediction asserts a specific habit (consuming soda and candy), which contradicts the gold answer.",
+      "triage_stage": "negative_answer_or_judge",
+      "gold_evidence": [
+        "D3:4"
+      ],
+      "evidence_hit": null,
+      "question_route": "adversarial",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 3,
+        "final_sources": 6,
+        "resolved_source_events": 4,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "What habit is Evan trying to change in terms of diet?\nChoose exactly one option based only on the conversation:\nA. Not mentioned in the conversation\nB. consuming soda and candy",
+          "Whether the conversation mentions any diet-related habit Evan is trying to change"
+        ],
+        "supplemental_candidates": 71,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "Whether the conversation mentions any diet-related habit Evan is trying to change"
+        ],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 0,
+        "context_tokens_estimate": 3948,
+        "elapsed_ms": 14.308400001027621
+      },
+      "citations": [
+        2
+      ]
+    },
+    {
+      "sample_id": "conv-50",
+      "qa_index": 4,
+      "category_id": 3,
+      "question": "Which country do Calvin and Dave want to meet in?",
+      "gold_answer": "United States",
+      "MemNexus_prediction": "There is no evidence that Calvin and Dave discussed or planned to meet in any country. The only travel plan in the records is Calvin's plan to travel to Japan next month (relative to 2023-03-23)【来源2】, but that is not stated as a meeting with Dave.",
+      "SimpleMem_prediction": "Boston",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction does not provide the gold answer 'United States' and instead denies any meeting plan, contradicting the gold answer.",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D3:9",
+        "D3:10"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-50",
+        "qa_index": 4,
+        "gold_count": 2,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "inference",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 1,
+        "supplemental_queries": [
+          "Which country do Calvin and Dave want to meet in?",
+          "The country Calvin and Dave want to meet in"
+        ],
+        "supplemental_candidates": 101,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 3,
+        "initial_missing_info": [
+          "The country Calvin and Dave want to meet in"
+        ],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4679,
+        "elapsed_ms": 31.824099998630118
+      },
+      "citations": [
+        2
+      ]
+    },
+    {
+      "sample_id": "conv-50",
+      "qa_index": 5,
+      "category_id": 1,
+      "question": "What are Dave's dreams?",
+      "gold_answer": "open a car maintenance shop, work on classic cars, build a custom car from scratch",
+      "MemNexus_prediction": "I don't have any record of Dave stating his dreams or aspirations. The available evidence covers Dave's creative approach and plans to show Calvin food spots, but nothing about Dave's own dreams.",
+      "SimpleMem_prediction": "Opening a shop and working on classic cars",
+      "SimpleMem_correct": false,
+      "judge_reason": "The prediction fails to provide any of the gold answer's core facts about Dave's dreams (opening a car maintenance shop, working on classic cars, building a custom car from scratch).",
+      "triage_stage": "gold_source_referenced_in_memory_but_not_selected",
+      "gold_evidence": [
+        "D4:5",
+        "D4:5",
+        "D5:5"
+      ],
+      "evidence_hit": {
+        "sample_id": "conv-50",
+        "qa_index": 5,
+        "gold_count": 2,
+        "retrieved_count": 7,
+        "any_gold": false,
+        "all_gold": false,
+        "memory_any_gold": true,
+        "memory_all_gold": true,
+        "judge_correct": false
+      },
+      "question_route": "fact",
+      "grounding": {
+        "enabled": true,
+        "initial_sources": 8,
+        "final_sources": 7,
+        "resolved_source_events": 8,
+        "rejected_source_refs": 0,
+        "attribution_conflicts": 0,
+        "supplemental_rounds": 0,
+        "supplemental_queries": [],
+        "supplemental_candidates": 0,
+        "semantic_fallback_used": false,
+        "raw_vector_inputs": 0,
+        "raw_vector_reused": 0,
+        "raw_sources_selected": 0,
+        "initial_missing_info": [],
+        "final_missing_info": [],
+        "coverage_measurement": "lexical_support_not_entailment",
+        "temporal_derivations": 1,
+        "context_tokens_estimate": 4550,
+        "elapsed_ms": 2.044900000328198
+      },
+      "citations": []
+    }
+  ],
+  "warning": "Triage stages use final gold-turn coverage; they are diagnostic labels, not proven causal attributions."
+}

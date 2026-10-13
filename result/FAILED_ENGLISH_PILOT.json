@@ -1,0 +1,8 @@
+{
+  "status": "blocked_before_quality_rows",
+  "reason": "MemNexus evidence validator rejected a provider extraction that cited a question as affirmative evidence",
+  "quality_rows": 0,
+  "data_was_not_used_as_a_result": true,
+  "runner_issue": "exception path did not close the retrieval projection before temporary-directory cleanup",
+  "fix_applied": "runner now closes MemNexus before propagating extraction failures"
+}

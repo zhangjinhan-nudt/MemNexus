@@ -1,0 +1,40 @@
+{
+  "cohort": "C:\\Users\\zhangjinhan\\Desktop\\10-agent\\result\\locomo_100_cohort_collection_20261013.json",
+  "preflight": {
+    "checks": {
+      "model": true,
+      "judge": true,
+      "temperature": true,
+      "window_stride": true,
+      "retrieval_max": true,
+      "collection_path_enabled": true,
+      "query_prompt": true,
+      "main_key_present": true,
+      "baseline_key_present": true,
+      "judge_key_present": true
+    },
+    "embedding_health": {
+      "status": "ok",
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "dimension": 1024
+    },
+    "query_and_document_vectors_match": true
+  },
+  "estimate": {
+    "conversations": 10,
+    "raw_turns": 1104,
+    "simplemem_windows": 197,
+    "simplemem_build_rmb": 5.7456,
+    "memnexus_build_rmb": 3.4399,
+    "simplemem_answers_rmb": 2.1806,
+    "memnexus_answers_rmb": 0.9975,
+    "judge_rmb": 0.1202,
+    "point_estimate_rmb": 12.4837,
+    "with_25pct_margin_rmb": 15.6047,
+    "max_session": 5,
+    "basis": "measured five-question English pilot usage scaled by selected raw turns, windows and 100 questions"
+  },
+  "new_questions": 79,
+  "reused_questions": 21,
+  "runner_sha256": "1c4fc050ff25817c88eef2a490d498e627564c8cc3b121a511190c5b0f7c1a4c"
+}

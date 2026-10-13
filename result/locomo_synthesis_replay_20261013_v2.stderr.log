@@ -1,0 +1,60 @@
+Traceback (most recent call last):
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 409, in validate
+    validate_table(table, sources, targets, kind)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\synthesis.py", line 84, in validate_table
+    raise ValueError("Every value needs an exact original, non-question evidence quote")
+ValueError: Every value needs an exact original, non-question evidence quote
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 266, in _structured
+    validate(result)
+    ~~~~~~~~^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 411, in validate
+    raise ModelOutputError(str(exc)) from exc
+agent_memory.providers.ModelOutputError: Every value needs an exact original, non-question evidence quote
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 409, in validate
+    validate_table(table, sources, targets, kind)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\synthesis.py", line 84, in validate_table
+    raise ValueError("Every value needs an exact original, non-question evidence quote")
+ValueError: Every value needs an exact original, non-question evidence quote
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\zhangjinhan\Desktop\10-agent\experiments\run_synthesis_replay.py", line 154, in <module>
+    asyncio.run(run(parser.parse_args()))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhangjinhan\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Users\zhangjinhan\AppData\Local\Programs\Python\Python313\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\zhangjinhan\AppData\Local\Programs\Python\Python313\Lib\asyncio\base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\experiments\run_synthesis_replay.py", line 104, in run
+    answer = await runtime.answer(scope, session.session_id, old["evaluation_query"],
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  top_k=20, timeout=180, accelerate=False, prepare=False)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\runtime.py", line 882, in answer
+    answer_table = await self.model.synthesize(query, retrieved.plan, retrieved.results)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 444, in synthesize
+    return await self._structured(prompt, AnswerTable, validate)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 280, in _structured
+    validate(result)
+    ~~~~~~~~^^^^^^^^
+  File "C:\Users\zhangjinhan\Desktop\10-agent\MemNexus\memory-system\src\agent_memory\providers.py", line 411, in validate
+    raise ModelOutputError(str(exc)) from exc
+agent_memory.providers.ModelOutputError: Every value needs an exact original, non-question evidence quote

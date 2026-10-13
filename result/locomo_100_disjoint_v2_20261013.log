@@ -1,0 +1,343 @@
+============================================================
+Initializing SimpleMem System
+============================================================
+Using custom OpenAI base URL: https://api.deepseek.com
+Created new table: memory_entries
+
+Clearing existing database...
+Created new table: memory_entries
+Database cleared
+
+System initialization complete!
+============================================================
+
+Processing window: 20 dialogues (processed 0 so far)
+FTS index created (Tantivy mode)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 20 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 40 so far)
+Added 22 memory entries
+Generated 22 memory entries
+
+Processing window: 20 dialogues (processed 60 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 80 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 100 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 120 so far)
+Added 19 memory entries
+Generated 19 memory entries
+
+Processing window: 20 dialogues (processed 140 so far)
+Added 23 memory entries
+Generated 23 memory entries
+
+Processing window: 20 dialogues (processed 160 so far)
+Added 28 memory entries
+Generated 28 memory entries
+
+Processing window: 20 dialogues (processed 180 so far)
+Added 27 memory entries
+Generated 27 memory entries
+
+Processing window: 20 dialogues (processed 200 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 220 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 240 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 260 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 280 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing remaining dialogues: 17 (fallback mode)
+Added 17 memory entries
+Generated 17 memory entries
+
+[Planning] Analyzing information requirements for: What is Caroline's relationship status?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question is ambiguous because 'Caroline' could refer to many people. To efficiently gather the required information, we need to first identify which Caroline is being referred to and then find her relationship status. The first query targets the context by searching for Caroline's relationship status, which may return results for a well-known Caroline. The second query adds a common identifier (full name) to disambiguate and find the specific Caroline's relationship status. This minimal set of two queries balances specificity and coverage.
+[Planning] Generated 3 targeted queries
+[Search 1] What is Caroline's relationship status?
+[Search 2] Caroline relationship status
+[Search 3] Caroline full name relationship status
+[Keyword Search] Found 0 results
+[Structured Search] Found 5 results
+[Planning] Found 36 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 20% - The available information does not explicitly state Caroline's current relationship status. While there is a mention of a 'tough breakup' in the past, it does not confirm her current status (e.g., single, in a relationship, divorced). Additionally, the context to identify which Caroline is being referred to is insufficient; only the first name 'Caroline' is provided without a full name, location, or other unique identifiers.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The current information does not explicitly state Caroline's current relationship status. While there is a mention of a 'tough breakup' in the past, it is unclear if Caroline is currently single, in a relationship, married, divorced, or widowed. Additionally, the context does not provide enough identifying details (such as full name, location, or other identifiers) to determine which Caroline is being referred to, which is necessary to search for her relationship status accurately.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Caroline relationship status 2023
+[Additional Search 2] Caroline adoption agencies single 2023
+[Additional Search 3] Caroline LGBTQ support group relationship status
+[Intelligent Reflection Round 1] Total results: 68
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information includes a clear statement that Caroline is a single parent (Info 49, 51, 52), which directly addresses the relationship status requirement. However, the context requirement is not fully satisfied because the information does not provide Caroline's full name, location, or other unique identifiers to distinguish which Caroline is being referred to. While the context is somewhat implied through the conversation with Melanie, it is not explicit enough to completely identify the individual.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The current information indicates that Caroline is a single parent pursuing adoption, but does not explicitly state her current relationship status (e.g., single, married, in a relationship, divorced, widowed). Additionally, the context does not provide a full name or other identifiers to distinguish which Caroline is being referred to, which is necessary to ensure the correct person's relationship status is found.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Caroline relationship status single parent adoption
+[Additional Search 2] Caroline full name identity adoption LGBTQ
+[Additional Search 3] Caroline current relationship status 2023
+[Intelligent Reflection Round 2] Total results: 76
+
+[Planning] Analyzing information requirements for: When did Caroline give a speech at a school?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for the date/time of a specific event involving Caroline giving a speech at a school. A single targeted query combining the key entities and the event relationship should retrieve the necessary information. The original question is already well-formed and specific, so it serves as the minimal query.
+[Planning] Generated 1 targeted queries
+[Search 1] When did Caroline give a speech at a school?
+[Keyword Search] Found 5 results
+[Structured Search] Found 0 results
+[Planning] Found 25 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The information confirms that Caroline gave a speech at a school (event type covered), but the exact date is not provided. The event is described as happening 'last week' relative to 9 June 2023, which is approximate and not a specific date. Therefore, the required date/time information is missing.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The exact date when Caroline gave a speech at a school is missing. The available information indicates that Caroline mentioned a school event 'last week' on 9 June 2023, but the specific date of the event is not provided. The event likely occurred between 2 June 2023 and 8 June 2023, but the precise date is needed.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Caroline school speech date June 2023
+[Additional Search 2] Caroline transgender journey school event date
+[Additional Search 3] Caroline speech at school last week June 2023
+[Intelligent Reflection Round 1] Total results: 52
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The information confirms that Caroline gave a speech at a school (event type covered), but the exact date is not provided. The event is described as happening 'last week' relative to June 9, 2023, which only gives an approximate timeframe (around early June 2023) rather than a specific date. Therefore, the date/time information type is not fully addressed.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Caroline gave a speech at a school event 'last week' relative to 9 June 2023, which would place it around early June 2023. However, the exact date of the speech is not specified. The missing information is the precise date when Caroline gave the speech at the school.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Caroline speech at school date
+[Additional Search 2] Caroline school event June 2023
+[Additional Search 3] Caroline transgender journey school speech date
+[Intelligent Reflection Round 2] Total results: 62
+
+[Planning] Analyzing information requirements for: When did Caroline meet up with her friends, family, and mentors?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question directly asks for the time of the meetup, so it serves as a comprehensive query. To specifically confirm the presence of all three groups (friends, family, mentors) at the same event, a second query is added. This minimal set of two queries efficiently targets both the temporal and participant information requirements.
+[Planning] Generated 2 targeted queries
+[Search 1] When did Caroline meet up with her friends, family, and mentors?
+[Search 2] Caroline meetup friends family mentors same event
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 36 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 70% - The available information indicates that Caroline met up with her family in the week before 9 June 2023, but it does not confirm that friends and mentors were present at the same meetup. The required information type 'participants' is not fully addressed because there is no evidence that all three groups (friends, family, and mentors) met together. Additionally, the exact date of the meetup is not specified, only a relative time frame.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Caroline met up with her family in the week before June 9, 2023, but it does not specify the exact date or time of the meetup. Additionally, it is unclear whether friends and mentors were present at the same meetup or if there were separate meetups. The specific event or occasion is also not described.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Caroline family meetup date week before June 9 2023
+[Additional Search 2] Caroline friends family mentors meetup event details
+[Additional Search 3] Caroline support system gathering date and participants
+[Intelligent Reflection Round 1] Total results: 55
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 40% - The available information indicates that Caroline met up with her family in the week before 9 June 2023, but it does not confirm that friends and mentors were present at the same meetup. The specific event or occasion is not clearly described, and the exact date or time period is vague. Therefore, the information is not sufficient to completely answer the question.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Caroline met up with friends, family, and mentors in the week before 9 June 2023, but the exact date and the specific event or occasion are not provided. Additionally, it is unclear whether all three groups (friends, family, and mentors) were present at the same meetup or if the photo only shows family. The missing details are the exact date, the nature of the event, and confirmation of participants.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Caroline meetup friends family mentors week before June 9 2023
+[Additional Search 2] Caroline family photo yard June 2023 event
+[Additional Search 3] Caroline support system gathering date June 2023
+[Intelligent Reflection Round 2] Total results: 63
+
+[Planning] Analyzing information requirements for: How long has Caroline had her current group of friends for?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for the duration Caroline has had her current group of friends. To answer this, we need to find when the group was formed (or when Caroline started considering them her current group) and the current date. The original query is included as it directly asks the question. A second query targets the formation time of the group. The current date is assumed to be known from the context or can be retrieved separately, but since the minimal queries needed is 2, we focus on the formation time and the original query.
+[Planning] Generated 2 targeted queries
+[Search 1] How long has Caroline had her current group of friends for?
+[Search 2] When did Caroline meet her current group of friends?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The required information types are addressed: the formation time is provided as 4 years before 9 June 2023 (i.e., around June 2019), and the reference time is 9 June 2023. This allows calculation of the duration (4 years).
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: Where did Caroline move from 4 years ago?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question is temporal-relational and requires determining the reference point for '4 years ago' and the origin location of Caroline's move. Two minimal queries are needed: one to establish the current date (temporal reference) and one to find the specific event and origin location. The original query is included as the second query to directly target the event and location.
+[Planning] Generated 2 targeted queries
+[Search 1] What is the current date?
+[Search 2] Where did Caroline move from 4 years ago?
+[Keyword Search] Found 5 results
+[Structured Search] Found 0 results
+[Planning] Found 44 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 66% - The temporal reference is available (current date 2023-06-09), and the event of moving 4 years ago is mentioned, but the origin location is not specified��only 'home country' is stated, which is not a specific location. Therefore, the required location information is missing.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Caroline moved from her home country 4 years before June 9, 2023, but the specific name of the home country is not provided. The missing information is the identity of Caroline's home country.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Caroline moved from home country
+[Additional Search 2] Caroline home country origin
+[Additional Search 3] Caroline moved from [country name]
+[Intelligent Reflection Round 1] Total results: 58
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The available information includes a temporal reference (9 June 2023), the event of Caroline moving from her home country 4 years prior, and the origin location (Sweden). All required information types are addressed, allowing a comprehensive answer.
+[Intelligent Reflection Round 2] Information is complete
+
+[Planning] Analyzing information requirements for: Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?
+[Planning] Identified 4 information requirements
+[Planning] Strategy: The original question is counterfactual and requires understanding Caroline's background, support, and motivations. Two queries are sufficient: one to gather factual information about Caroline's support and career motivations, and the original query to directly address the counterfactual aspect. This minimizes redundancy while covering all required information types.
+[Planning] Generated 2 targeted queries
+[Search 1] Caroline counseling career motivation childhood support
+[Search 2] Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 29 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 75% - The available information covers Caroline's current career aspirations, the support she received, and her motivations for pursuing counseling. However, there is no information about how her career choice might differ without the support she received, which is necessary to answer the counterfactual question. Therefore, the information is insufficient to fully answer the original question.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information covers Caroline's current interest in counseling, her motivations (personal journey, support received, desire to help others), and her career aspirations. However, there is no information about the nature and extent of support Caroline received growing up, nor any counterfactual reasoning about how her career choice might differ without that support. To answer the question, we need details about Caroline's childhood support system and any statements she has made about how that support influenced her career path.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Caroline childhood support system growing up
+[Additional Search 2] Caroline counseling career motivation without support
+[Additional Search 3] Caroline personal journey support mental health career
+[Intelligent Reflection Round 1] Total results: 49
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 75% - The available information covers Caroline's current career aspirations, the support she received growing up, and her motivations for pursuing counseling. However, there is no information on how her career choice might differ without that support, which is required for counterfactual reasoning. Therefore, the information is insufficient to fully answer the question.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information shows Caroline's current interest in counseling and that she received support growing up, but it does not provide any counterfactual reasoning about how her career choice might differ without that support. Specifically, there is no information on whether Caroline's motivation for counseling is directly tied to her own experiences of receiving support, or whether she would still pursue counseling if she hadn't received such support.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Caroline counseling career motivation without support
+[Additional Search 2] Caroline would she pursue counseling if no support
+[Additional Search 3] Caroline counterfactual counseling career support
+[Intelligent Reflection Round 2] Total results: 52
+
+[Planning] Analyzing information requirements for: What are Caroline's plans for the summer?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question is broad and may not specify the summer year or context. To efficiently gather all required information, we need two targeted queries: one to identify the specific summer period (temporal requirement) and another to find the actual plans (factual requirement). The original query is included as it directly addresses the core factual information. The temporal query helps disambiguate the time frame, which is crucial for accurate retrieval.
+[Planning] Generated 2 targeted queries
+[Search 1] What are Caroline's plans for the summer?
+[Search 2] Caroline summer plans 2024
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 38 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The available information addresses all required information types. The temporal requirement is satisfied by references to summer 2023 (e.g., May 25, 2023, and July 3, 2023). The factual requirement is met with specific plans: researching adoption agencies, attending a transgender conference in July 2023, continuing education, exploring career options in counseling/mental health, and using her story to help others. The contextual requirement is fulfilled by the conversation between Caroline and Melanie on May 25, 2023, and July 3, 2023. Although some plans are mentioned in May and others in July, they collectively provide a comprehensive answer about Caroline's summer plans.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What type of individuals does the adoption agency Caroline is considering support?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question asks about the types of individuals supported by the adoption agency Caroline is considering. To answer this, we need to identify the specific agency and then find information about the types of individuals it supports. The first query targets the identification of the agency, while the second query targets the attribute of supported individuals. The original query is included as it directly addresses the overall question.
+[Planning] Generated 3 targeted queries
+[Search 1] What type of individuals does the adoption agency Caroline is considering support?
+[Search 2] Which adoption agency is Caroline considering?
+[Search 3] What types of individuals does the adoption agency support for adoption?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 28 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information identifies the adoption agency as one that helps LGBTQ+ folks with adoption, but it does not specify the types of individuals (e.g., children, infants, special needs) that the agency supports for adoption. The required attribute information is missing.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The specific adoption agency that Caroline is considering is not identified in the available information. Additionally, the types of individuals (e.g., children, infants, special needs, LGBTQ+ youth) that the agency supports for adoption are not specified. The available information only indicates that the agency helps LGBTQ+ folks with adoption, but this refers to prospective adoptive parents, not the individuals available for adoption.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Caroline adoption agency name LGBTQ+ inclusive
+[Additional Search 2] adoption agency Caroline considering supports children types
+[Additional Search 3] Caroline adoption agency helps LGBTQ+ folks adoption children
+[Intelligent Reflection Round 1] Total results: 36
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 50% - The available information identifies the adoption agency as one that helps LGBTQ+ individuals with adoption, but it does not specify the types of individuals (e.g., children, infants, special needs) that the agency supports for adoption. The required attribute information is missing.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The specific adoption agency that Caroline is considering is not identified in the available information. Additionally, the types of individuals (e.g., children, infants, special needs, LGBTQ+ youth) that the agency supports for adoption are not specified. The available information only indicates that the agency helps LGBTQ+ folks with adoption and that Caroline wants to give kids a loving home.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Caroline adoption agency name LGBTQ+
+[Additional Search 2] adoption agency helps LGBTQ+ folks adoption Caroline
+[Additional Search 3] Caroline adoption agency supports children types
+[Intelligent Reflection Round 2] Total results: 37
+
+[Planning] Analyzing information requirements for: Why did Caroline choose the adoption agency?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question directly asks for the reason behind Caroline's choice, which covers the high-priority decision criteria. A single query is sufficient to retrieve this information, as additional queries for context or alternatives would be redundant or low priority.
+[Planning] Generated 1 targeted queries
+[Search 1] Why did Caroline choose the adoption agency?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 25 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 90% - The high-priority information type (decision criteria) is fully addressed: multiple sources consistently state that Caroline chose the adoption agency because it helps LGBTQ+ folks and its inclusivity and support spoke to her. The medium-priority context is also covered: Caroline was researching agencies, had a dream to give kids a loving home, and felt hopeful and optimistic. The low-priority alternatives are not explicitly mentioned, but this is not critical for answering the question. Overall, the information is sufficient to provide a comprehensive answer.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What is Melanie excited about in her adoption process?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. creating a family for kids who need one
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks about Melanie's excitement in her adoption process, which covers both required information types: her feelings and the reason for them. Since the analysis indicates only one minimal query is needed, the original question itself is the most efficient and targeted query.
+[Planning] Generated 2 targeted queries
+[Search 1] What is Melanie excited about in her adoption process?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. creating a family for kids who need one
+[Search 2] What is Melanie excited about in her adoption process?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 30 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What does Melanie's necklace symbolize?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. love, faith, and strength
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks about the symbolism of Melanie's necklace, which covers both the explicit statement and contextual clue requirements. Since the minimal queries needed is 1, only the original query is necessary.
+[Planning] Generated 2 targeted queries
+[Search 1] What does Melanie's necklace symbolize?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. love, faith, and strength
+[Search 2] What does Melanie's necklace symbolize?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 30 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What country is Melanie's grandma from?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Sweden
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks for a specific fact about Melanie's grandma's country of origin. The minimal set of queries should include the original question to directly retrieve any explicit statement, and a broader query to capture contextual clues about her background or nationality. This ensures both high and medium priority information requirements are addressed efficiently.
+[Planning] Generated 3 targeted queries
+[Search 1] What country is Melanie's grandma from?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. Sweden
+[Search 2] What country is Melanie's grandma from?
+[Search 3] Melanie's grandma background or nationality
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 41 unique results (semantic + keyword + structured)
+Using custom OpenAI base URL: https://api.deepseek.com

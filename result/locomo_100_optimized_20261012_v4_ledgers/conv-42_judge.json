@@ -1,0 +1,9 @@
+{
+  "provider_attempts": 28,
+  "retry_attempts": 0,
+  "provider_errors": 0,
+  "input_tokens": 4206,
+  "output_tokens": 956,
+  "cost_rmb": 0.019272000000000004,
+  "reserved_rmb": 0.0
+}

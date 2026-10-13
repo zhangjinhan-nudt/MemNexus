@@ -1,0 +1,210 @@
+{"cohort": "C:\\Users\\zhangjinhan\\Desktop\\10-agent\\result\\locomo_100_cohort_collection_20261013.json", "preflight": {"checks": {"model": true, "judge": true, "temperature": true, "window_stride": true, "retrieval_max": true, "collection_path_enabled": true, "query_prompt": true, "main_key_present": true, "baseline_key_present": true, "judge_key_present": true}, "embedding_health": {"status": "ok", "model": "Qwen/Qwen3-Embedding-0.6B", "dimension": 1024}, "query_and_document_vectors_match": true}, "estimate": {"conversations": 10, "raw_turns": 1104, "simplemem_windows": 197, "simplemem_build_rmb": 5.7456, "memnexus_build_rmb": 3.4399, "simplemem_answers_rmb": 2.1806, "memnexus_answers_rmb": 0.9975, "judge_rmb": 0.1202, "point_estimate_rmb": 12.4837, "with_25pct_margin_rmb": 15.6047, "max_session": 5, "basis": "measured five-question English pilot usage scaled by selected raw turns, windows and 100 questions"}, "new_questions": 79, "reused_questions": 21, "runner_sha256": "1c4fc050ff25817c88eef2a490d498e627564c8cc3b121a511190c5b0f7c1a4c"}
+============================================================
+Initializing SimpleMem System
+============================================================
+Using custom OpenAI base URL: https://api.deepseek.com
+Created new table: memory_entries
+
+Clearing existing database...
+Created new table: memory_entries
+Database cleared
+
+System initialization complete!
+============================================================
+
+Processing window: 20 dialogues (processed 0 so far)
+FTS index created (Tantivy mode)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 20 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 40 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 60 so far)
+Added 21 memory entries
+Generated 21 memory entries
+
+Processing window: 20 dialogues (processed 80 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 100 so far)
+Added 22 memory entries
+Generated 22 memory entries
+
+Processing window: 20 dialogues (processed 120 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 140 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 160 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 180 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 200 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 220 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 240 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 260 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 280 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 300 so far)
+Added 20 memory entries
+Generated 20 memory entries
+
+Processing window: 20 dialogues (processed 320 so far)
+Added 25 memory entries
+Generated 25 memory entries
+
+Processing remaining dialogues: 16 (fallback mode)
+Added 16 memory entries
+Generated 16 memory entries
+
+[Planning] Analyzing information requirements for: Which types of cars does Dave like the most?
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The original question directly asks for Dave's favorite car types, which covers the high-priority preference requirement. A single query is sufficient to retrieve this information, as additional queries would be redundant.
+[Planning] Generated 1 targeted queries
+[Search 1] Which types of cars does Dave like the most?
+[Keyword Search] Found 3 results
+[Structured Search] Found 5 results
+[Planning] Found 27 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The available information explicitly states that Dave is obsessed with classic cars, loves their design and engineering, and dreams of working on them. This directly addresses the high-priority requirement for Dave's favorite types of cars. The medium-priority context requirement is also satisfied by multiple statements and actions, such as attending car shows, restoring a classic car, and expressing passion for classic cars. No critical gaps remain.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: Does Dave's shop employ a lot of people?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question is broad and may not directly yield the specific information needed. To efficiently gather the required information, we need two targeted queries: one to identify Dave and his shop, and another to find the number of employees. The original question is included as a fallback, but the targeted queries are more likely to retrieve the necessary details.
+[Planning] Generated 3 targeted queries
+[Search 1] Does Dave's shop employ a lot of people?
+[Search 2] Who is Dave and what is Dave's shop?
+[Search 3] How many employees work at Dave's shop?
+Error during keyword search: Syntax Error: Dave's shop employ a lot of people
+[Keyword Search] Found 0 results
+[Structured Search] Found 5 results
+[Planning] Found 26 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 60% - The information identifies Dave's shop as a car maintenance shop and provides some contextual details, but it does not specify the number of people employed at the shop. Without this quantitative data, it is impossible to determine whether Dave's shop employs a lot of people.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information identifies Dave and his shop (a car maintenance shop) but does not provide any details about the number of people employed there. The only potential clue is a photo of a group of people in front of a car, but it's unclear if they are employees. Therefore, the missing information is the number of employees at Dave's shop, and possibly a context for what counts as 'a lot' in the automotive repair industry.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Dave's car maintenance shop number of employees
+[Additional Search 2] Dave's auto repair shop staff size
+[Additional Search 3] average number of employees in a car repair shop
+[Intelligent Reflection Round 1] Total results: 38
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 33% - The information identifies Dave and his shop as a car maintenance shop, but it does not provide any quantitative data on the number of employees. There is a mention of working with 'awesome mechanics' (plural), but no specific number or estimate is given. Additionally, there is no contextual information establishing what would count as 'a lot of people' for a shop. Therefore, the question cannot be answered.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information identifies Dave as the owner of a car maintenance shop in Boston, but does not provide any details about the number of employees at the shop. To answer whether Dave's shop employs a lot of people, we need to find the employee count or team size. Additionally, a threshold for 'a lot' may be needed, but the primary missing piece is the quantitative data on employment.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Dave's car maintenance shop Boston number of employees
+[Additional Search 2] Dave's auto shop team size
+[Additional Search 3] Dave's garage staff count
+[Intelligent Reflection Round 2] Total results: 47
+
+[Planning] Analyzing information requirements for: What is Dave's new business venture as of 1 May, 2023?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question is ambiguous because 'Dave' could refer to multiple individuals. To resolve this, the first query includes the original question to potentially retrieve direct answers. The second query adds context about the business venture to disambiguate and find specific information about Dave's venture as of May 1, 2023. These two queries target the core information needs: identifying Dave and determining the venture.
+[Planning] Generated 2 targeted queries
+[Search 1] What is Dave's new business venture as of 1 May, 2023?
+[Search 2] Dave new business venture May 2023
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 29 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 100% - The information identifies Dave as the person who opened a car maintenance shop and later teamed up with a local garage. The new business venture as of 1 May 2023 is clearly the car maintenance shop, which was newly opened and active on that date. All required information types are addressed.
+[Intelligent Reflection Round 1] Information is complete
+
+[Planning] Analyzing information requirements for: What was the necklace Calvin received meant to remind him of?
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The original question directly asks about the purpose of the necklace, which covers the symbolism requirement. To efficiently gather the event context and source, a second query focusing on the story or origin of the necklace is needed. This two-query approach minimizes redundancy while targeting all required information.
+[Planning] Generated 2 targeted queries
+[Search 1] What was the necklace Calvin received meant to remind him of?
+[Search 2] Calvin necklace story origin meaning
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+
+[Intelligent Reflection Round 1] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 40% - The available information identifies the source (another artist) and indicates the necklace serves as a reminder of why Calvin keeps hustling as a musician, but it does not specify the exact event or context in which Calvin received the necklace, nor does it provide the precise intended meaning or message behind the necklace as a reminder. The symbolism is only vaguely described, and the event is missing, so the information is not sufficient to completely answer the question.
+[Intelligent Reflection Round 1] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Calvin received the necklace from another artist as a gift and that it reminds him of why he keeps hustling as a musician. However, the specific event or context in which he received the necklace is not described, nor is the exact intended meaning or message behind the necklace as a reminder. Additionally, the identity of the artist who gave the necklace is not provided.
+[Intelligent Reflection Round 1] Generated 3 targeted queries
+[Additional Search 1] Calvin necklace gift from artist reminder why he keeps hustling as a musician
+[Additional Search 2] Calvin received necklace from artist context event
+[Additional Search 3] Calvin necklace diamond pendant meaning reminder hustle
+[Intelligent Reflection Round 1] Total results: 44
+
+[Intelligent Reflection Round 2] Analyzing information completeness...
+[Intelligent Reflection] Coverage: 70% - The available information confirms that Calvin received the necklace from another artist and that it serves as a reminder of why he keeps hustling as a musician. However, the specific event or context in which he received the necklace is not described, and the intended meaning is only vaguely stated as 'why Calvin keeps hustling as a musician' without further detail. Thus, the answer is not fully comprehensive.
+[Intelligent Reflection Round 2] Information is incomplete, generating targeted additional queries...
+[Intelligent Reflection] Missing info: The available information indicates that Calvin received a necklace from another artist as a gift and that it serves as a reminder of why he keeps hustling as a musician. However, the specific event or context in which he received the necklace is not described, and the exact intended meaning or message behind the necklace as a reminder is not explicitly stated. Additionally, the identity of the artist who gave the necklace is not provided.
+[Intelligent Reflection Round 2] Generated 3 targeted queries
+[Additional Search 1] Calvin necklace gift from artist reminder why he keeps hustling as a musician
+[Additional Search 2] Calvin received necklace from artist context event
+[Additional Search 3] Calvin necklace diamond pendant meaning reminder hustle
+[Intelligent Reflection Round 2] Total results: 44
+
+[Planning] Analyzing information requirements for: What did Dave receive as a gift from another artist?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. a gold necklace with a diamond pendant
+[Planning] Identified 3 information requirements
+[Planning] Strategy: The question asks for a specific fact about a gift Dave received from another artist. A single, well-crafted query that includes the key entities (Dave, gift, artist) should retrieve the necessary information. The original question is already focused and serves as the minimal query.
+[Planning] Generated 2 targeted queries
+[Search 1] What did Dave receive as a gift from another artist?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. a gold necklace with a diamond pendant
+[Search 2] What did Dave receive as a gift from another artist?
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 33 unique results (semantic + keyword + structured)
+
+[Planning] Analyzing information requirements for: What was the necklace Dave received meant to remind him of?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. why he keeps hustling as a musician
+[Planning] Identified 2 information requirements
+[Planning] Strategy: The question asks about the purpose of a necklace Dave received, specifically what it was meant to remind him of. The required information includes the occasion/reason for receiving the necklace and its symbolism. Since the question is based on a conversation, the most efficient approach is to search the conversation for mentions of 'Dave' and 'necklace' to find the relevant context. One targeted query should suffice to retrieve the necessary information.
+[Planning] Generated 2 targeted queries
+[Search 1] What was the necklace Dave received meant to remind him of?
+Choose exactly one option based only on the conversation:
+A. Not mentioned in the conversation
+B. why he keeps hustling as a musician
+[Search 2] Dave necklace reminder
+[Keyword Search] Found 5 results
+[Structured Search] Found 5 results
+[Planning] Found 31 unique results (semantic + keyword + structured)
+Using custom OpenAI base URL: https://api.deepseek.com
+{"conversation": "conv-50", "paired_questions": 6, "cumulative_run_cost_rmb": 15.5758}
+{"status": "completed", "run_cost_rmb": 15.575800800000001, "summary": {"systems": {"SimpleMem": {"n": 100, "correct": 73, "accuracy": 0.73, "input_tokens": 927136, "output_tokens": 58998, "provider_attempts": 578, "answer_cost_rmb": 2.7915072000000016, "build_cost_rmb": 6.2316864, "main_model_cost_rmb": 9.023193600000003, "cost_per_correct_answer_rmb": 0.12360539178082196, "latency_p50_ms": 6125.570149997657, "latency_p95_ms": 13222.877699998207, "by_category": {"category_1": {"n": 13, "correct": 8, "accuracy": 0.6153846153846154}, "category_2": {"n": 25, "correct": 21, "accuracy": 0.84}, "category_3": {"n": 9, "correct": 2, "accuracy": 0.2222222222222222}, "category_4": {"n": 28, "correct": 23, "accuracy": 0.8214285714285714}, "category_5": {"n": 25, "correct": 19, "accuracy": 0.76}}}, "MemNexus": {"n": 100, "correct": 68, "accuracy": 0.68, "input_tokens": 653027, "output_tokens": 48880, "provider_attempts": 202, "answer_cost_rmb": 2.0365128, "build_cost_rmb": 4.378924799999999, "main_model_cost_rmb": 6.415437599999999, "cost_per_correct_answer_rmb": 0.09434467058823527, "latency_p50_ms": 2899.0, "latency_p95_ms": 7648, "by_category": {"category_1": {"n": 13, "correct": 6, "accuracy": 0.46153846153846156}, "category_2": {"n": 25, "correct": 17, "accuracy": 0.68}, "category_3": {"n": 9, "correct": 4, "accuracy": 0.4444444444444444}, "category_4": {"n": 28, "correct": 20, "accuracy": 0.7142857142857143}, "category_5": {"n": 25, "correct": 21, "accuracy": 0.84}}}}, "paired_accuracy_difference_mem_minus_simple": -0.05, "paired_bootstrap_95pct_ci": [-0.16, 0.06], "discordant_mem_only_correct": 13, "discordant_simple_only_correct": 18, "mcnemar_exact_two_sided_p": 0.47312965989112854}}

@@ -1,0 +1,1520 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "benchmark": "synthetic_fault_injection_planning",
+  "seed": 20261011,
+  "episodes": 20,
+  "environment": {
+    "action_model": "deterministic precondition/resource/effect transitions",
+    "fault_model": "one external resource state change after initial plan prefix",
+    "baseline": "stale-plan context-only execution without belief-state update",
+    "memnexus": "versioned observation plus one dependency-aware local replan"
+  },
+  "summary": {
+    "episodes": 20,
+    "recoverable_episodes": 16,
+    "baseline_plan_success": 0.0,
+    "memnexus_plan_success": 0.8,
+    "baseline_replanning_success": 0.0,
+    "global_replanner_plan_success": 0.8,
+    "global_replanner_replanning_success": 1.0,
+    "memnexus_replanning_success": 1.0,
+    "baseline_constraint_violations": 20,
+    "memnexus_constraint_violations": 0,
+    "mean_preserved_steps": 1.0
+  },
+  "episodes_detail": [
+    {
+      "task_id": "logistics-00",
+      "domain": "resource_routing",
+      "recoverable": true,
+      "initial_plan": [
+        "pack_order",
+        "standard_ship"
+      ],
+      "fault": {
+        "resource": "standard_slot",
+        "amount": 0,
+        "changed": [
+          "resource:standard_slot"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "standard_ship",
+            "success": false,
+            "reason": "insufficient_resource:standard_slot"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "standard_ship"
+        ],
+        "preserved_steps": [
+          "pack_order"
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "deployment-01",
+      "domain": "infrastructure",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_release",
+        "deploy_primary",
+        "verify_service"
+      ],
+      "fault": {
+        "resource": "primary_host",
+        "amount": 0,
+        "changed": [
+          "resource:primary_host"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "deploy_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_host"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "deploy_primary",
+          "verify_service"
+        ],
+        "preserved_steps": [
+          "prepare_release"
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "migration-02",
+      "domain": "data_migration",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_migration",
+        "migrate_primary",
+        "validate_migration",
+        "cutover"
+      ],
+      "fault": {
+        "resource": "primary_db",
+        "amount": 0,
+        "changed": [
+          "resource:primary_db"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "migrate_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_db"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "migrate_primary",
+          "validate_migration",
+          "cutover"
+        ],
+        "preserved_steps": [
+          "prepare_migration"
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "event-03",
+      "domain": "temporal_resource",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_event",
+        "schedule_venue",
+        "publish_event"
+      ],
+      "fault": {
+        "resource": "venue",
+        "amount": 0,
+        "changed": [
+          "resource:venue"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "schedule_venue",
+            "success": false,
+            "reason": "insufficient_resource:venue"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "schedule_venue",
+          "publish_event"
+        ],
+        "preserved_steps": [
+          "prepare_event"
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "logistics-04",
+      "domain": "resource_routing",
+      "recoverable": false,
+      "initial_plan": [
+        "pack_order",
+        "standard_ship"
+      ],
+      "fault": {
+        "resource": "standard_slot",
+        "amount": 0,
+        "changed": [
+          "resource:standard_slot",
+          "resource:express_slot"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "standard_ship",
+            "success": false,
+            "reason": "insufficient_resource:standard_slot"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanned_plan": []
+      },
+      "memnexus": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "standard_ship"
+        ],
+        "preserved_steps": [
+          "pack_order"
+        ],
+        "replanned_plan": [],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "deployment-05",
+      "domain": "infrastructure",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_release",
+        "deploy_primary",
+        "verify_service"
+      ],
+      "fault": {
+        "resource": "primary_host",
+        "amount": 0,
+        "changed": [
+          "resource:primary_host"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "deploy_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_host"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "deploy_primary",
+          "verify_service"
+        ],
+        "preserved_steps": [
+          "prepare_release"
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "migration-06",
+      "domain": "data_migration",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_migration",
+        "migrate_primary",
+        "validate_migration",
+        "cutover"
+      ],
+      "fault": {
+        "resource": "primary_db",
+        "amount": 0,
+        "changed": [
+          "resource:primary_db"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "migrate_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_db"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "migrate_primary",
+          "validate_migration",
+          "cutover"
+        ],
+        "preserved_steps": [
+          "prepare_migration"
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "event-07",
+      "domain": "temporal_resource",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_event",
+        "schedule_venue",
+        "publish_event"
+      ],
+      "fault": {
+        "resource": "venue",
+        "amount": 0,
+        "changed": [
+          "resource:venue"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "schedule_venue",
+            "success": false,
+            "reason": "insufficient_resource:venue"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "schedule_venue",
+          "publish_event"
+        ],
+        "preserved_steps": [
+          "prepare_event"
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "logistics-08",
+      "domain": "resource_routing",
+      "recoverable": true,
+      "initial_plan": [
+        "pack_order",
+        "standard_ship"
+      ],
+      "fault": {
+        "resource": "standard_slot",
+        "amount": 0,
+        "changed": [
+          "resource:standard_slot"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "standard_ship",
+            "success": false,
+            "reason": "insufficient_resource:standard_slot"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "standard_ship"
+        ],
+        "preserved_steps": [
+          "pack_order"
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "deployment-09",
+      "domain": "infrastructure",
+      "recoverable": false,
+      "initial_plan": [
+        "prepare_release",
+        "deploy_primary",
+        "verify_service"
+      ],
+      "fault": {
+        "resource": "primary_host",
+        "amount": 0,
+        "changed": [
+          "resource:primary_host",
+          "resource:backup_host"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "deploy_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_host"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanned_plan": []
+      },
+      "memnexus": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "deploy_primary",
+          "verify_service"
+        ],
+        "preserved_steps": [
+          "prepare_release"
+        ],
+        "replanned_plan": [],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "migration-10",
+      "domain": "data_migration",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_migration",
+        "migrate_primary",
+        "validate_migration",
+        "cutover"
+      ],
+      "fault": {
+        "resource": "primary_db",
+        "amount": 0,
+        "changed": [
+          "resource:primary_db"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "migrate_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_db"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "migrate_primary",
+          "validate_migration",
+          "cutover"
+        ],
+        "preserved_steps": [
+          "prepare_migration"
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "event-11",
+      "domain": "temporal_resource",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_event",
+        "schedule_venue",
+        "publish_event"
+      ],
+      "fault": {
+        "resource": "venue",
+        "amount": 0,
+        "changed": [
+          "resource:venue"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "schedule_venue",
+            "success": false,
+            "reason": "insufficient_resource:venue"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "schedule_venue",
+          "publish_event"
+        ],
+        "preserved_steps": [
+          "prepare_event"
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "logistics-12",
+      "domain": "resource_routing",
+      "recoverable": true,
+      "initial_plan": [
+        "pack_order",
+        "standard_ship"
+      ],
+      "fault": {
+        "resource": "standard_slot",
+        "amount": 0,
+        "changed": [
+          "resource:standard_slot"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "standard_ship",
+            "success": false,
+            "reason": "insufficient_resource:standard_slot"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "standard_ship"
+        ],
+        "preserved_steps": [
+          "pack_order"
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "deployment-13",
+      "domain": "infrastructure",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_release",
+        "deploy_primary",
+        "verify_service"
+      ],
+      "fault": {
+        "resource": "primary_host",
+        "amount": 0,
+        "changed": [
+          "resource:primary_host"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "deploy_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_host"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "deploy_primary",
+          "verify_service"
+        ],
+        "preserved_steps": [
+          "prepare_release"
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "migration-14",
+      "domain": "data_migration",
+      "recoverable": false,
+      "initial_plan": [
+        "prepare_migration",
+        "migrate_primary",
+        "validate_migration",
+        "cutover"
+      ],
+      "fault": {
+        "resource": "primary_db",
+        "amount": 0,
+        "changed": [
+          "resource:primary_db",
+          "resource:emergency_db"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "migrate_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_db"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanned_plan": []
+      },
+      "memnexus": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "migrate_primary",
+          "validate_migration",
+          "cutover"
+        ],
+        "preserved_steps": [
+          "prepare_migration"
+        ],
+        "replanned_plan": [],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "event-15",
+      "domain": "temporal_resource",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_event",
+        "schedule_venue",
+        "publish_event"
+      ],
+      "fault": {
+        "resource": "venue",
+        "amount": 0,
+        "changed": [
+          "resource:venue"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "schedule_venue",
+            "success": false,
+            "reason": "insufficient_resource:venue"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "schedule_remote",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "publish_event",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "schedule_venue",
+          "publish_event"
+        ],
+        "preserved_steps": [
+          "prepare_event"
+        ],
+        "replanned_plan": [
+          "schedule_remote",
+          "publish_event"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "logistics-16",
+      "domain": "resource_routing",
+      "recoverable": true,
+      "initial_plan": [
+        "pack_order",
+        "standard_ship"
+      ],
+      "fault": {
+        "resource": "standard_slot",
+        "amount": 0,
+        "changed": [
+          "resource:standard_slot"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "standard_ship",
+            "success": false,
+            "reason": "insufficient_resource:standard_slot"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "express_ship",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "standard_ship"
+        ],
+        "preserved_steps": [
+          "pack_order"
+        ],
+        "replanned_plan": [
+          "express_ship"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "deployment-17",
+      "domain": "infrastructure",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_release",
+        "deploy_primary",
+        "verify_service"
+      ],
+      "fault": {
+        "resource": "primary_host",
+        "amount": 0,
+        "changed": [
+          "resource:primary_host"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "deploy_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_host"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "deploy_backup",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "verify_service",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "deploy_primary",
+          "verify_service"
+        ],
+        "preserved_steps": [
+          "prepare_release"
+        ],
+        "replanned_plan": [
+          "deploy_backup",
+          "verify_service"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "migration-18",
+      "domain": "data_migration",
+      "recoverable": true,
+      "initial_plan": [
+        "prepare_migration",
+        "migrate_primary",
+        "validate_migration",
+        "cutover"
+      ],
+      "fault": {
+        "resource": "primary_db",
+        "amount": 0,
+        "changed": [
+          "resource:primary_db"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "migrate_primary",
+            "success": false,
+            "reason": "insufficient_resource:primary_db"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ]
+      },
+      "memnexus": {
+        "plan_success": true,
+        "replanning_success": true,
+        "constraint_violations": 0,
+        "actions": [
+          {
+            "action": "migrate_emergency",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "validate_migration",
+            "success": true,
+            "reason": "ok"
+          },
+          {
+            "action": "cutover",
+            "success": true,
+            "reason": "ok"
+          }
+        ],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "migrate_primary",
+          "validate_migration",
+          "cutover"
+        ],
+        "preserved_steps": [
+          "prepare_migration"
+        ],
+        "replanned_plan": [
+          "migrate_emergency",
+          "validate_migration",
+          "cutover"
+        ],
+        "reason": "state_change_dependency_replan"
+      }
+    },
+    {
+      "task_id": "event-19",
+      "domain": "temporal_resource",
+      "recoverable": false,
+      "initial_plan": [
+        "prepare_event",
+        "schedule_venue",
+        "publish_event"
+      ],
+      "fault": {
+        "resource": "venue",
+        "amount": 0,
+        "changed": [
+          "resource:venue",
+          "resource:remote_channel"
+        ]
+      },
+      "baseline": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 1,
+        "actions": [
+          {
+            "action": "schedule_venue",
+            "success": false,
+            "reason": "insufficient_resource:venue"
+          }
+        ]
+      },
+      "global_replanner": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanned_plan": []
+      },
+      "memnexus": {
+        "plan_success": false,
+        "replanning_success": false,
+        "constraint_violations": 0,
+        "actions": [],
+        "replanning_calls": 1,
+        "affected_steps": [
+          "schedule_venue",
+          "publish_event"
+        ],
+        "preserved_steps": [
+          "prepare_event"
+        ],
+        "replanned_plan": [],
+        "reason": "state_change_dependency_replan"
+      }
+    }
+  ]
+}

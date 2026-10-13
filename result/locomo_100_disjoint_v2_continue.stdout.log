@@ -1,0 +1,15 @@
+============================================================
+Initializing SimpleMem System
+============================================================
+Using custom OpenAI base URL: https://api.deepseek.com
+Created new table: memory_entries
+
+Clearing existing database...
+Created new table: memory_entries
+Database cleared
+
+System initialization complete!
+============================================================
+
+Processing window: 20 dialogues (processed 0 so far)
+{"status": "aborted", "failure": {"type": "ConnectError", "message": "[WinError 10061] 由于目标计算机积极拒绝，无法连接。"}, "upper_run_cost_rmb": 9.8743536}

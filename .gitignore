@@ -1,2 +1,80 @@
+# Secrets and local configuration
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+SimpleMem/config.py
+SimpleMem/config.local.py
+
+# Python caches, test caches and coverage output
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+**/.pytest_cache/
+.ruff_cache/
+**/.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Virtual environments and local packages
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Local databases, vector stores and runtime state
+lancedb_data/
+**/lancedb_data/
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/memory_entries.lance/
+**/omni_memory_data/
+**/evolution_results/
+**/data/
+
+# Logs, traces and provider ledgers
+*.log
+*.log.*
+*.jsonl
+**/usage*.json
+**/usage*.jsonl
+**/attempts/
+
+# Generated benchmark outputs and figures
+result/
+experiments/__pycache__/
+experiments/*.pyc
 benchmark-data/
-.env/benchmark-data/
+
+# Model checkpoints and downloaded artifacts
+*.bin
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.parquet
+
+# Editors, operating systems and temporary files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.temp

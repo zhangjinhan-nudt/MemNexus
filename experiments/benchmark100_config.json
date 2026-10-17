@@ -1,0 +1,10 @@
+{
+  "cohort": "result/locomo_100_cohort_collection_20261013.json",
+  "output_root": "result/benchmark100",
+  "budget_rmb": 50.0,
+  "variant": "configured",
+  "auto_start_embedding": true,
+  "embedding_start_timeout_seconds": 300,
+  "judge_seed": 20261014,
+  "open_report": true
+}

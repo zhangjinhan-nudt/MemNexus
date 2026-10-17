@@ -130,6 +130,8 @@ def bleu1(prediction: str, reference: str) -> float:
 
 
 def evaluation_query(qa: dict) -> tuple[str, str]:
+    if qa.get("dataset") == "LongMemEval-S":
+        return qa["question"] + "\nQuestion date: " + qa["question_date"], str(qa["answer"])
     if qa["category"] != 5:
         return qa["question"], qa["answer"]
     query = (
@@ -174,7 +176,7 @@ def raw_turns(sample: dict, max_session: int | None = None) -> list[dict]:
                     {
                         "dia_id": turn["dia_id"],
                         "speaker": turn["speaker"],
-                        "text": text.strip(),
+                        "text": text if sample.get("dataset") == "LongMemEval-S" else text.strip(),
                         "date_time": date_text,
                     }
                 )
@@ -218,6 +220,8 @@ def run_simplemem(
     turns = raw_turns(
         sample, ORACLE_MAX_SESSION if max_session is None else max_session
     )
+    if sample.get("expected_raw_turns") is not None and len(turns) != sample["expected_raw_turns"]:
+        raise ValueError("Raw conversation coverage mismatch before any provider request")
     embedder = RemoteQwenEmbedding()
     with tempfile.TemporaryDirectory(prefix="simplemem-locomo-pilot-") as folder:
         system = SimpleMemSystem(
@@ -347,6 +351,9 @@ async def run_memnexus(
     turns = raw_turns(
         sample, ORACLE_MAX_SESSION if max_session is None else max_session
     )
+    if sample.get("expected_raw_turns") is not None and len(turns) != sample["expected_raw_turns"]:
+        raise ValueError("Raw conversation coverage mismatch before any provider request")
+    longmemeval = sample.get("dataset") == "LongMemEval-S"
     async with AsyncExitStack() as resources:
         folder = resources.enter_context(
             tempfile.TemporaryDirectory(prefix="memnexus-locomo-pilot-")
@@ -355,9 +362,9 @@ async def run_memnexus(
             Settings(
                 db_path=Path(folder) / "memory.sqlite3",
                 pending_turns=5,
-                context_turns=15,
+                context_turns=int(os.getenv("MEMORY_CONTEXT_TURNS", "15")),
                 model_timeout=180,
-                model_max_tokens=4096,
+                model_max_tokens=int(os.getenv("EXPERIMENT_MEMNEXUS_MAX_TOKENS", "4096")),
                 planner_mode="model",
                 acceleration_enabled=False,
                 output_language="en",
@@ -377,25 +384,28 @@ async def run_memnexus(
         started = time.perf_counter()
         extraction_batches = 0
         for index, turn in enumerate(turns, 1):
-            result = await runtime.append_turn(
-                scope,
-                session.session_id,
-                TurnInput(
-                    request_id=f"dialogue-{index}",
-                    events=[
-                        Event(
-                            role="user",
-                            speaker=turn["speaker"],
-                            content=f"{turn['speaker']}: {turn['text']}",
-                            occurred_at=parse_occurred_at(turn["date_time"]),
-                        )
-                    ],
-                ),
-            )
-            if result["extraction_due"]:
-                extracted = await runtime.extract(scope, session.session_id)
-                if extracted["status"] != "idle":
-                    extraction_batches += 1
+            content = turn["text"] if longmemeval else f"{turn['speaker']}: {turn['text']}"
+            chunks = [content]
+            for part, chunk in enumerate(chunks):
+                result = await runtime.append_turn(
+                    scope,
+                    session.session_id,
+                    TurnInput(
+                        request_id=f"dialogue-{index}-{part}",
+                        events=[
+                            Event(
+                                role=("assistant" if longmemeval and turn["speaker"] == "assistant" else "user"),
+                                speaker=turn["speaker"],
+                                content=chunk,
+                                occurred_at=parse_occurred_at(turn["date_time"]),
+                            )
+                        ],
+                    ),
+                )
+                if result["extraction_due"]:
+                    extracted = await runtime.extract(scope, session.session_id)
+                    if extracted["status"] != "idle":
+                        extraction_batches += 1
         while True:
             extracted = await runtime.extract(scope, session.session_id)
             if extracted["status"] == "idle":
@@ -527,7 +537,16 @@ def judge_rows(
             response_format={"type": "json_object"},
             max_retries=2,
         )
-        parsed = judge.extract_json(response)
+        try:
+            parsed = judge.extract_json(response)
+        except (ValueError, TypeError, json.JSONDecodeError):
+            # Some providers emit a long reasoning preamble despite JSON mode.
+            # Recover only a complete final label object; never infer a label
+            # from prose or silently mark an unparseable judgment.
+            matches = re.findall(r"\{\s*\"label\"\s*:\s*\"(?:CORRECT|WRONG)\"\s*,\s*\"reason\"\s*:\s*\"(?:\\.|[^\"])*\"\s*\}", response, re.DOTALL)
+            if not matches:
+                raise
+            parsed = json.loads(matches[-1])
         label = str(parsed.get("label", "")).upper()
         if label not in {"CORRECT", "WRONG"}:
             raise RuntimeError("Judge returned an invalid label")

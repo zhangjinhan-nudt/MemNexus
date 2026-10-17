@@ -6,6 +6,7 @@ Shared-entity/embedding edges never establish membership or event identity.
 
 from collections import defaultdict
 from datetime import UTC, datetime
+import os
 from typing import Literal
 
 from pydantic import Field
@@ -309,7 +310,8 @@ def indexed_answer(
                 coverage.unresolved.append(f"missing_source:{memory.memory_id}")
                 continue
             event = turn.events[ref.event_index]
-            if ref.quote not in event.content or event.role == "assistant" or question_only(event.content):
+            allow_assistant = os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
+            if ref.quote not in event.content or (event.role == "assistant" and not allow_assistant) or question_only(event.content):
                 coverage.unresolved.append(f"invalid_source:{memory.memory_id}")
                 continue
             marker = (ref.turn_id, ref.event_index, ref.quote)

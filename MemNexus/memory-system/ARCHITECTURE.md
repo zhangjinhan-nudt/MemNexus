@@ -34,6 +34,13 @@ flowchart LR
 
 `answer` 默认先处理积压，每批最多 5 个新 turn，最多补充 15 个已处理 turn 作为语境；turn 是持久化记录单位，不保证等于完整的用户—助手对话轮。`search` 保持只读，不自动调用抽取。手动 `/extract` 仍可独立运行。
 
+启用 `MEMORY_SEMANTIC_EXECUTION=true` 时，回答阶段在检索后建立 `AnswerContract`，模型只负责生成带来源的
+`BoundAnswer` 和候选账本，程序负责主体/角色检查、列表/计数/时间执行和最终渲染。集合候选中的
+`accepted` 项会确定性物化为答案，`rejected`/`unresolved` 项保留在回答回执中。已有证据但未绑定时走一次
+`reread`，确实没有候选时才走一次 premise retrieval；开放域的 `member_scope_unknown` 只记录为不确定性，
+不会单独触发第二轮检索。增量更新使用 binding ID、显式 revision 和 conflict set 原子合并，旧来源未在新
+prompt 中重发不能作为撤回依据。该路径的额外回答调用默认上限为 2 次。
+
 原文、抽取结果、摘要和处理水位在同一事务中提交，演化任务同时写入 SQLite outbox。抽取模型、Schema 或证据校验失败时水位不推进；抽取提交后演化失败返回可见警告，任务保留，后续调用可重试，重启后仍可恢复。回答规划或生成失败不会撤销已经成功提交的抽取。
 
 ## 证据与记忆演化

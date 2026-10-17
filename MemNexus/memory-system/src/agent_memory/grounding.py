@@ -8,11 +8,12 @@ penalties. Scores are retrieval heuristics, never truth probabilities.
 
 import json
 import math
+import os
 import re
 import time
 from collections import Counter
 from dataclasses import dataclass
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from .evidence_policy import question_only
 from .models import GroundingTrace, Hit, QueryPlan, Turn
@@ -82,20 +83,25 @@ def speaker_of(event) -> str | None:
     return match.group(1) if match else None
 
 
-def source_payload(hit: Hit) -> dict:
+def source_payload(hit: Hit, *, compact: bool = False, include_time: bool = True) -> dict:
     # Full provenance stays in the receipt. The model gets the source once,
     # without repeated IDs, offsets and duplicate calendar anchors.
     source_events = []
     for event in hit.metadata.get("source_events", []):
         record = {key: event[key] for key in ("speaker", "role", "occurred_at", "text", "context_only")}
-        if event["time_derivations"]:
+        if "turn_sequence" in event:
+            record["turn_sequence"] = event["turn_sequence"]
+        # Source quotes remain lossless even in compact mode; truncating them
+        # would make a valid binding impossible to cite. Compact mode removes
+        # duplicate metadata instead of cutting evidence spans.
+        if include_time and event["time_derivations"]:
             record["time_derivations"] = [
                 {key: value[key] for key in ("expression", "start", "end_exclusive", "precision", "rule")}
                 for value in event["time_derivations"]
             ]
         source_events.append(record)
     return {
-        "claim": hit.content,
+        "claim": hit.content[:500] if compact else hit.content,
         "attributes": {
             key: hit.metadata.get(key)
             for key in (
@@ -120,7 +126,7 @@ def _cost(hit: Hit) -> int:
     return len(json.dumps(source_payload(hit), ensure_ascii=False)) + 16
 
 
-def close_evidence_bundles(sources, turns, *, session_id, blocked_events, budget):
+def close_evidence_bundles(sources, turns, *, session_id, blocked_events, budget, expand_from=0, as_of=None):
     """Attach local discourse context without crossing session/time/lifecycle boundaries.
 
     Round-robin nearest neighbours prevents one hit consuming the whole budget.
@@ -130,7 +136,7 @@ def close_evidence_bundles(sources, turns, *, session_id, blocked_events, budget
     ordered = [(turn, i) for turn in turns if turn.session_id == session_id for i in range(len(turn.events))]
     positions = {(turn.turn_id, i): n for n, (turn, i) in enumerate(ordered)}
     seen = {(e["turn_id"], e["event_index"]) for hit in sources for e in hit.metadata.get("source_events", [])}
-    seeds = [(hit, positions[(e["turn_id"], e["event_index"])]) for hit in sources
+    seeds = [(hit, positions[(e["turn_id"], e["event_index"])]) for hit in sources[expand_from:]
              for e in hit.metadata.get("source_events", []) if (e["turn_id"], e["event_index"]) in positions]
     used = sum(_cost(hit) for hit in sources)
     for offset in (-1, 1, -2, 2, 3):
@@ -145,6 +151,8 @@ def close_evidence_bundles(sources, turns, *, session_id, blocked_events, budget
             if identity in seen or identity in blocked_events:
                 continue
             if event.occurred_at is None or anchor.occurred_at is None:
+                continue
+            if as_of and event.occurred_at > as_of:
                 continue
             if abs((event.occurred_at - anchor.occurred_at).total_seconds()) > 1800:
                 continue
@@ -186,13 +194,15 @@ def _source_event(turn: Turn, index: int, text: str, start: int) -> dict:
     return {
         "turn_id": turn.turn_id,
         "event_index": index,
+        "turn_sequence": turn.sequence,
         "speaker": speaker_of(event),
         "role": event.role,
         "occurred_at": anchor.isoformat(),
         "text": text,
         "start": start,
         "end": start + len(text),
-        "context_only": event.role == "assistant" or question_only(event.content),
+        "context_only": (event.role == "assistant" and os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower()
+                         not in {"1", "true", "yes"}) or question_only(event.content),
         "time_derivations": [item.dump() for item in derive_times(text, anchor)],
     }
 
@@ -239,7 +249,7 @@ def collect_raw_records(query, plan, turns, session_id, blocked_events):
                 continue
             if plan.as_of and event.occurred_at > plan.as_of:
                 continue
-            if event.role == "assistant" and not re.search(
+            if event.role == "assistant" and os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() not in {"1", "true", "yes"} and not re.search(
                 r"recommend|suggest|assistant|you (?:say|said)|建议|推荐|你说", query, re.IGNORECASE
             ):
                 continue
@@ -250,6 +260,217 @@ def collect_raw_records(query, plan, turns, session_id, blocked_events):
 
 def record_key(record):
     return f"{record['turn_id']}:{record['event_index']}:{record['start']}"
+
+
+def gap_queries(plan, gaps):
+    queries = []
+    for output_id, cue in list(dict.fromkeys((g.output_id, g.cue) for g in gaps if g.action == "retrieve"))[:2]:
+        output = next((o for o in plan.answer_contract.outputs if o.output_id == output_id), None) if plan.answer_contract else None
+        queries.append(" ".join([*(output.subjects if output else []), output.relation if output else "",
+                                 output.qualifier if output else "", cue]))
+    return queries
+
+
+def retrieve_gaps(query, plan, gaps, sources, *, turns, session_id, blocked_events, budget,
+                  max_new=8, semantic_scores=None, candidate_hits=None, resolved_turns=None):
+    """One bounded, source-grounded acquisition; append IDs, never reorder old citations.
+
+    Gap cues rank candidates, not truth. No gold or proposed answer is queried.
+    Returns new sources and an auditable acquisition receipt.
+    """
+    searches = gap_queries(plan, gaps)
+    if not searches:
+        return [], {"queries": [], "candidate_count": 0, "new_source_ids": [],
+                    "gap_codes": [g.code for g in gaps], "stop_reason": "no_retrievable_gap"}
+    seen = {(e["turn_id"], e["event_index"], e.get("start", 0))
+            for h in sources for e in h.metadata.get("source_events", [])}
+    records = [(e, text) for e, text in collect_raw_records(query, plan, turns, session_id, blocked_events)
+               if (e["turn_id"], e["event_index"], e["start"]) not in seen]
+    existing_ids = {s.chunk_id for s in sources}
+    pool_hits = []
+    resolved_turns = resolved_turns or {t.turn_id:t for t in turns if t.session_id == session_id}
+    for candidate in candidate_hits or []:
+        if candidate.chunk_id in existing_ids:
+            continue
+        candidate = candidate.model_copy(deep=True)
+        if candidate.metadata.get("status", "active") != "active":
+            continue
+        if not candidate.metadata.get("source_events"):
+            events = []
+            for ref in candidate.metadata.get("evidence", []):
+                turn = resolved_turns.get(ref.get("turn_id"))
+                index = ref.get("event_index")
+                if turn is None or type(index) is not int or not 0 <= index < len(turn.events):
+                    continue
+                if (turn.turn_id,index) in blocked_events:
+                    continue
+                event = turn.events[index]
+                if plan.as_of and event.occurred_at > plan.as_of:
+                    continue
+                if ref.get("quote") and ref["quote"] in event.content:
+                    quote = ref["quote"]
+                    offset = event.content.index(quote)
+                    # Keep the matched quote, including references after the
+                    # first 700 characters; cross-session context stays quoted.
+                    if turn.session_id == session_id:
+                        start = max(0,offset-100)
+                        text = event.content[start:max(start+700,offset+len(quote))]
+                    else:
+                        start,text = offset,quote
+                    events.append(_source_event(turn, index, text, start))
+            candidate.metadata["source_events"] = events
+        candidate.metadata["source_events"] = [e for e in candidate.metadata.get("source_events", [])
+            if (e["turn_id"],e["event_index"]) not in blocked_events
+            and (not plan.as_of or datetime.fromisoformat(e["occurred_at"]) <= plan.as_of)]
+        if candidate.metadata["source_events"] and any(record_key(e) not in {record_key(s)
+                for h in sources for s in h.metadata.get("source_events", [])}
+                for e in candidate.metadata["source_events"]):
+            pool_hits.append(candidate)
+    receipt = {"queries": [], "candidate_count": len(records)+len(pool_hits), "new_source_ids": [],
+               "stop_reason": "no_new_candidates", "gap_codes": [g.code for g in gaps]}
+    if not records and not pool_hits or budget <= 0:
+        receipt["stop_reason"] = "budget_exhausted" if budget <= 0 else "no_new_candidates"
+        return [], receipt
+    ranked = []
+    actors = {term for o in (plan.answer_contract.outputs if plan.answer_contract else [])
+              for actor in o.subjects for term in terms(actor)}
+    generic = terms("evidence information determine answer whether number names date time missing")
+    texts = [text for _, text in records] + [h.content for h in pool_hits]
+    for query_index, search in enumerate(searches):
+        receipt["queries"].append(search)
+        focus = terms(search) - actors - generic
+        # Use matching normalization for both query and documents. The actor is
+        # context, never sufficient lexical evidence for the missing relation.
+        normalized_documents = [" ".join(sorted(normalized_terms(text))) for text in texts]
+        scores = _bm25(" ".join(sorted(normalized_terms(" ".join(focus)))), normalized_documents)
+        ordered = sorted(range(len(texts)), key=lambda i: (-scores[i], texts[i]))
+        candidates = [(scores[i], i) for i in ordered if scores[i] > 0]
+        if semantic_scores is not None:
+            def similarity(index):
+                refs = [records[index][0]] if index < len(records) else pool_hits[index-len(records)].metadata["source_events"]
+                return max((semantic_scores.get(record_key(e), [0]*len(searches))[query_index] for e in refs), default=0)
+            # Rank only candidates with actual semantic support. Missing scores
+            # and irrelevant tail items no longer earn a reciprocal-rank vote.
+            semantic = sorted((i for i in range(len(texts)) if similarity(i) >= .35), key=lambda i:-similarity(i))
+            fused = Counter()
+            for rank, (_, i) in enumerate(candidates):
+                fused[i] += 1/(60+rank+1)
+            for rank, i in enumerate(semantic):
+                fused[i] += 1/(60+rank+1)
+            candidates = [(score, i) for i,score in sorted(fused.items(), key=lambda x:-x[1])]
+        ranked.append(candidates[:12])
+    # Round-robin access prevents one gap monopolizing the budget. A nearby
+    # response/explanation can join each chosen anchor within the same budget.
+    chosen, used, selected = [], 0, set()
+    covered_spans = set(seen)
+    per_query = Counter()
+    for rank in range(12):
+        for query_index, order in enumerate(ranked):
+            if rank >= len(order) or len(chosen) >= max_new or per_query[query_index] >= 4:
+                continue
+            score, index = order[rank]
+            if index in selected:
+                continue
+            if index < len(records):
+                record, text = records[index]
+                hit = Hit(content=text, score=score/(1+score),
+                          source_file=f"[turn:{record['turn_id']}]", chunk_id=f"gap:{record_key(record)}",
+                          metadata={"origin":"premise_retrieval", "source_support_status":"resolved",
+                                    "scope_type":"session", "scope_id":session_id,
+                                    "status":"active", "assertion":"stated", "source_events":[record]})
+            else:
+                hit = pool_hits[index-len(records)].model_copy(deep=True)
+                hit.metadata["origin"] = "premise_retrieval"
+            spans = {(e["turn_id"],e["event_index"],e.get("start",0)) for e in hit.metadata["source_events"]}
+            if spans <= covered_spans:
+                continue
+            cost = _cost(hit)
+            if used + cost > budget:
+                continue
+            chosen.append(hit)
+            selected.add(index)
+            covered_spans.update(spans)
+            per_query[query_index] += 1
+            used += cost
+    if chosen:
+        # Include at most two neighbours per newly selected anchor, while keeping
+        # all previously supplied sources in the deduplication set.
+        combined = close_evidence_bundles([*sources, *chosen], turns, session_id=session_id,
+                                         blocked_events=blocked_events,
+                                         budget=sum(_cost(s) for s in sources)+budget,
+                                         expand_from=len(sources), as_of=plan.as_of)
+        # Existing IDs/content are immutable across the delta call; only take the
+        # appended bundles. Additional context on old bundles is discarded.
+        chosen = combined[len(sources):]
+        receipt["new_source_ids"] = list(range(len(sources)+1, len(sources)+len(chosen)+1))
+        receipt["stop_reason"] = "one_round_completed"
+    else:
+        receipt["stop_reason"] = "no_useful_candidate"
+    receipt["added_context_chars"] = sum(_cost(h) for h in chosen)
+    return chosen, receipt
+
+
+def reread_evidence(sources, *, turns, session_id, blocked_events, budget, as_of=None,
+                    max_new=6, query="", gaps=(), bindings=None):
+    """Expand only already-authorized evidence with local event context.
+
+    Rereading is deliberately separate from retrieval: it may add adjacent
+    explanations from the same session, but it never scans the whole corpus or
+    invents a query. A no-op is an auditable stop condition.
+    """
+    if not sources:
+        return list(sources), {"action": "reread", "stop_reason": "no_budget",
+                               "changed_source_ids": [], "added_context_chars": 0}
+    expanded = close_evidence_bundles(
+        list(sources), turns, session_id=session_id, blocked_events=blocked_events,
+        budget=sum(_cost(h) for h in sources) + max(0, budget), expand_from=0, as_of=as_of,
+    )
+    changed = []
+    for index, (before, after) in enumerate(zip(sources, expanded, strict=True), 1):
+        before_events = {(e["turn_id"], e["event_index"]) for e in before.metadata.get("source_events", [])}
+        after_events = {(e["turn_id"], e["event_index"]) for e in after.metadata.get("source_events", [])}
+        if after_events - before_events:
+            changed.append(index)
+    if len(changed) > max_new:
+        changed = changed[:max_new]
+        expanded = [h if i in changed else sources[i-1] for i, h in enumerate(expanded, 1)]
+    if gaps:
+        # An unresolved interpretation is actionable even with ZERO new text.
+        # Only already authorized source IDs are eligible; no gold/retrieval oracle.
+        affected = {g.output_id for g in gaps}
+        focus = query + " " + " ".join(g.cue for g in gaps)
+        texts = [" ".join(e["text"] for e in h.metadata.get("source_events", [])) for h in expanded]
+        scores = _bm25(focus, texts)
+        anchored = set()
+        if bindings is not None:
+            for slot in bindings.slots:
+                if slot.output_id in affected:
+                    anchored.update(r.source_id for value in slot.values for r in value.supports)
+                    anchored.update(r.source_id for candidate in slot.candidates for r in candidate.supports)
+                    anchored.update(r.source_id for refs in slot.input_support.values() for r in refs)
+        order = sorted(range(len(expanded)), key=lambda i: (-(i+1 in anchored), -scores[i], i))
+        selected, used = [], 0
+        for i in order:
+            if i+1 not in anchored and scores[i] <= 0:
+                continue
+            cost = _cost(expanded[i])
+            if used + cost > 7000 or len(selected) >= max_new:
+                continue
+            selected.append(i+1)
+            used += cost
+        return expanded, {"action": "reread", "stop_reason": "reread_selected" if selected else "no_relevant_existing_source",
+                          "read_source_ids": selected, "changed_source_ids": changed,
+                          "added_context_chars": sum(_cost(h)-_cost(old) for h,old in zip(expanded,sources,strict=True))}
+    if not changed:
+        return expanded, {"action": "reread", "stop_reason": "reread_no_gain",
+                          "changed_source_ids": [], "added_context_chars": 0}
+    added_chars = sum(_cost(expanded[index - 1]) - _cost(sources[index - 1]) for index in changed)
+    return expanded, {
+        "action": "reread",
+        "stop_reason": "reread_completed",
+        "changed_source_ids": changed,
+        "added_context_chars": added_chars,
+    }
 
 
 def ground_evidence(

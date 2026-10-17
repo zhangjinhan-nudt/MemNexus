@@ -28,7 +28,7 @@ class Scope(Contract):
 
 class Event(Contract):
     role: Literal["user", "assistant", "tool"]
-    content: str = Field(min_length=1, max_length=16000)
+    content: str = Field(min_length=1, max_length=100000)
     speaker: str | None = Field(default=None, min_length=1, max_length=200)
     occurred_at: datetime = Field(default_factory=utcnow)
     source_utc_offset_minutes: int = Field(default=0, ge=-840, le=840)
@@ -99,7 +99,7 @@ class Session(Contract):
 class Evidence(Contract):
     turn_id: str
     event_index: int = Field(ge=0)
-    quote: str = Field(min_length=1, max_length=16000)
+    quote: str = Field(min_length=1, max_length=100000)
 
 
 class FactMember(Contract):
@@ -231,6 +231,29 @@ class CollectionQuery(Contract):
         return self
 
 
+class AnswerOutput(Contract):
+    """An obligation anchored to the user's question, not a proposed answer."""
+
+    output_id: str = Field(min_length=1, max_length=40)
+    question_span: str = Field(min_length=1, max_length=1000)
+    operator: Literal["direct", "set", "count", "time_point", "duration"] = "direct"
+    subjects: list[str] = Field(default_factory=list, max_length=8)
+    subject_mode: Literal["single", "each", "joint", "common"] = "single"
+    relation: str = Field(default="", max_length=200)
+    qualifier: str = Field(default="", max_length=500)
+    required_inputs: list[str] = Field(default_factory=list, max_length=6)
+
+
+class AnswerContract(Contract):
+    outputs: list[AnswerOutput] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def unique_ids(self):
+        if len({o.output_id for o in self.outputs}) != len(self.outputs):
+            raise ValueError("Output IDs must be unique")
+        return self
+
+
 class QueryPlan(Contract):
     route: Literal["none", "short", "long", "both"] = "both"
     response_intent: Literal["direct_answer", "action_plan"] = "direct_answer"
@@ -264,6 +287,7 @@ class QueryPlan(Contract):
         default_factory=list, max_length=12
     )
     collection_query: CollectionQuery | None = None
+    answer_contract: AnswerContract | None = None
 
     @field_validator("as_of")
     @classmethod

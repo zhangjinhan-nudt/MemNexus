@@ -304,9 +304,17 @@ def classify_question(query: str, known_entities: list[str] | None = None) -> Qu
     )
     if adversarial:
         kind = "adversarial"
+    elif re.search(
+        r"\b(?:recommend|recommendation|suggest|suggestions?|advice|ideas?|inspiration)\b|建议|推荐|灵感",
+        lower,
+    ) and not re.search(r"\b(?:what did|what .* (?:recommend|suggest)|which .* (?:recommend|suggest))\b", lower):
+        # Advice questions need a broad personal-context recall pass.  Treating
+        # them as ordinary fact lookup over-ranks the nearest topical question
+        # and loses the user's established preferences/ongoing activities.
+        kind = "recommendation"
     elif re.search(r"how (?:many|long).*?(?:years?|months?|weeks?|days?|hours?)|相隔|多久", lower):
         kind = "temporal"
-    elif re.search(r"how many|number of|how often|times|多少|几次|几个|几项", lower):
+    elif re.search(r"\b(?:how many|number of|how often|times)\b|多少|几次|几个|几项", lower):
         kind = "count"
     elif re.search(
         r"when|what date|what year|which year|how long ago|how many years|哪年|何时|什么时候|多久|几月|日期", lower
@@ -347,7 +355,7 @@ def classify_question(query: str, known_entities: list[str] | None = None) -> Qu
     return QuestionRoute(
         kind=kind,
         recall_policy="recall_first"
-        if kind in {"set", "count", "relation", "causal", "inference"}
+        if kind in {"set", "count", "relation", "causal", "inference", "recommendation"}
         else "focused",
         entities=tuple(entities),
         constraints=tuple(constraints),

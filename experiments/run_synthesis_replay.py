@@ -94,7 +94,15 @@ async def run(args):
                                   "policy":"Add checked inverse year-duration arithmetic; retain all previously validated answers, not selected by score"}
         for field in ("rows","qa_usage","judge_usage","snapshot_sha256"):
             report[field] = deepcopy(previous[field])
+        completed_samples = {j["sample_id"] for j in previous["judge_usage"]}
         for p in args.resume.with_name(args.resume.stem+"_ledgers").iterdir():
+            # A judge ledger may contain a partial conversation and cannot be
+            # appended as if it were a complete usage record. QA/build ledgers
+            # remain reusable because their rows are checkpointed separately.
+            if p.name.endswith("_judge.json") or p.name.endswith("_judge.calls.jsonl"):
+                sample = p.name.split("_judge", 1)[0]
+                if sample not in completed_samples:
+                    continue
             shutil.copyfile(p,ledgers/p.name)
         consumed = sum(json.loads(p.read_text(encoding="utf-8"))["cost_rmb"] for p in ledgers.glob("*_memnexus.json"))
         save(args.output,report)
@@ -148,6 +156,9 @@ async def run(args):
             paired = [r for r in report["rows"] if r["sample_id"] == sid]
             for old in original["rows"]:
                 if old["system"] == "SimpleMem" and old["sample_id"] == sid:
+                    if any(r["system"] == "SimpleMem" and r["sample_id"] == sid and
+                           r["qa_index"] == old["qa_index"] for r in report["rows"]):
+                        continue
                     copy = deepcopy(old)
                     copy["original_judge_result"] = copy["judge_result"]
                     copy["judge_result"] = None

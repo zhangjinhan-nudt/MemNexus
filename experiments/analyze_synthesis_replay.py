@@ -53,10 +53,13 @@ def analyze(path):
             assert indexed[key]["prediction"] == row["prediction"]
             if row["system"] != "MemNexus":
                 continue
-            table = AnswerTable.model_validate(row["reasoning"]["answer_table"])
-            validate_table(table,[Hit.model_validate(h) for h in row["retrieved_sources"]],
-                           row["plan"]["required_info"] or [row["evaluation_query"]],answer_type(row["evaluation_query"]))
-            assert render_table(table) == row["prediction"]
+            if "answer_table" in row.get("reasoning", {}):
+                table = AnswerTable.model_validate(row["reasoning"]["answer_table"])
+                validate_table(table,[Hit.model_validate(h) for h in row["retrieved_sources"]],
+                               row["plan"]["required_info"] or [row["evaluation_query"]],answer_type(row["evaluation_query"]))
+                assert render_table(table) == row["prediction"]
+            elif row.get("reasoning", {}).get("answer_path") not in {"semantic_execution", "source_bound_synthesis"}:
+                raise AssertionError("Retained row lacks an auditable answer receipt")
             retained += 1
         continuation = {"retained_answers_revalidated":retained,"policy":continuation["policy"]}
     audit = Counter()

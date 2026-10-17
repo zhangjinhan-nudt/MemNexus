@@ -17,8 +17,11 @@ from .grounding import (
     ANSWER_REASONING_CONTRACT,
     close_evidence_bundles,
     collect_raw_records,
+    gap_queries,
     ground_evidence,
     record_key,
+    reread_evidence,
+    retrieve_gaps,
     source_payload,
 )
 from .grounding import (
@@ -39,11 +42,28 @@ from .models import (
 )
 from .planning import BeliefState
 from .ports import ConflictError, ModelNotConfigured, NotFoundError
-from .providers import build_model
+from .providers import ModelOutputError, answer_call_budget, build_model
 from .reasoning import EventGraph, classify_question, indexed_memory_hits, typed_negative_gate
 from .retrieval import Retriever, _cosine, estimate_tokens
 from .retrieval_projection import RetrievalProjection
 from .settings import Settings
+
+
+_EVAL_DATE_SUFFIX = re.compile(
+    r"\s*\n\s*Question date:\s*\d{4}/\d{1,2}/\d{1,2}\s*\([^\n)]*\)\s*\d{1,2}:\d{2}\s*$",
+    re.IGNORECASE,
+)
+
+
+def _reasoning_query(query: str) -> str:
+    """Remove benchmark metadata from the semantic question only.
+
+    LongMemEval appends a timestamp to each evaluation prompt.  Treating the
+    words ``Question``/``Tue`` and its year as entities/constraints can suppress
+    the actual evidence.  The original query remains available to the caller;
+    only planning, routing and answer contracts receive the clean question.
+    """
+    return _EVAL_DATE_SUFFIX.sub("", query).strip()
 from .short_term import ShortTermMemory
 from .store import SQLiteStore
 
@@ -532,11 +552,23 @@ class MemoryRuntime:
         prepare: bool = True,
         progress=None,
     ) -> AnswerResponse:
+        with answer_call_budget(
+            self.settings.semantic_execution_enabled,
+            max_calls=self.settings.semantic_max_answer_calls,
+        ) as allowance:
+            return await self._answer_impl(scope, session_id, query, top_k, timeout,
+                                           accelerate=accelerate, prepare=prepare,
+                                           progress=progress, allowance=allowance)
+
+    async def _answer_impl(
+        self, scope, session_id, query, top_k, timeout, *, accelerate, prepare, progress, allowance,
+    ) -> AnswerResponse:
         if self.model is None:
             raise ModelNotConfigured("No model configured for answer generation")
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         started = time.perf_counter()
+        query = _reasoning_query(query)
         call_metrics_before = self.call_metrics.snapshot()
         run_events = []
 
@@ -557,6 +589,8 @@ class MemoryRuntime:
             await emit("planning", "正在理解问题，确定查询范围")
             version = await asyncio.to_thread(self.store.generation_version, scope, session_id)
             retrieved = await self.search(scope, session_id, query, top_k, timeout, progress=emit)
+            if allowance is not None:
+                allowance["active"] = True
             await emit(
                 "retrieval",
                 f"检索完成：{retrieved.candidate_count} 条候选，选择 {len(retrieved.results)} 条证据",
@@ -579,6 +613,13 @@ class MemoryRuntime:
             synthesis = (self.settings.answer_synthesis_enabled and hasattr(self.model, "synthesize")
                          and retrieved.plan.response_intent == "direct_answer"
                          and self.settings.evidence_grounding_enabled)
+            complex_route = reasoning_route.kind in {"adversarial", "count", "set", "relation", "causal", "inference"}
+            semantic = (synthesis and self.settings.semantic_execution_enabled and hasattr(self.model, "bind_answer")
+                        and (not self.settings.semantic_execution_complex_only or complex_route))
+            execution = None
+            if semantic:
+                from .synthesis import execution_contract
+                retrieved.plan.answer_contract = execution_contract(query, retrieved.plan)
             answer_table = None
             collection_ir, indexed_ir, collection_sources = None, None, []
             pending = sum(turn.sequence > session.processed_sequence for turn in turns)
@@ -750,6 +791,7 @@ class MemoryRuntime:
                     retrieved.results = close_evidence_bundles(
                         grounded.sources, turns, session_id=session_id, blocked_events=blocked_events,
                         budget=min(available_evidence_budget, int(answer_limit * .72)),
+                        as_of=retrieved.plan.as_of,
                     )
                     from .grounding import _cost
                     grounded.trace.context_tokens_estimate = sum(_cost(hit) for hit in retrieved.results)
@@ -774,7 +816,7 @@ class MemoryRuntime:
                     steps=[step.model_dump(mode="json") for step in retrieved.steps],
                     sources=[hit.model_dump(mode="json") for hit in retrieved.results],
                 )
-            event_graph = EventGraph.from_hits(retrieved.results) if synthesis or collection_query is None else EventGraph()
+            event_graph = EventGraph.from_hits(retrieved.results) if not semantic and (synthesis or collection_query is None) else EventGraph()
             negative_gate = typed_negative_gate(query, reasoning_route, event_graph)
             reasoning_context = event_graph.prompt_context(query, reasoning_route)
             reasoning_trace = {
@@ -798,7 +840,7 @@ class MemoryRuntime:
                     reasoning=reasoning_trace,
                 )
 
-            evidence = [] if collection_ir is not None else [
+            evidence = [] if semantic or collection_ir is not None else [
                 f"【来源{i}】"
                 + json.dumps(
                     source_payload(hit),
@@ -806,7 +848,7 @@ class MemoryRuntime:
                 )
                 for i, hit in enumerate(retrieved.results, 1)
             ]
-            header = _answer_header(
+            header = "" if semantic else _answer_header(
                 session,
                 retrieved.plan,
                 retrieved.warnings,
@@ -848,7 +890,7 @@ class MemoryRuntime:
             selected_turns = []
             # Keep answer prompts bounded even when extraction is delayed and the
             # session contains several long assistant responses.
-            recent = turns[-min(self.settings.context_turns, 8) :] if self.settings.context_turns else []
+            recent = turns[-min(self.settings.context_turns, 8) :] if self.settings.context_turns and not semantic else []
             for turn in reversed(recent):
                 if grounding.enabled and any(
                     (turn.turn_id, index) in blocked_events for index in range(len(turn.events))
@@ -875,7 +917,124 @@ class MemoryRuntime:
             enabled = accelerate and self.settings.acceleration_enabled and collection_query is None and not synthesis
             generation_started = time.perf_counter()
             inference = None
-            if synthesis:
+            if semantic:
+                from .grounding import _cost
+                from .synthesis import check_and_execute, follow_up_gaps, merge_incremental, render_table
+                contract = retrieved.plan.answer_contract
+                self.call_metrics.record("answer")
+                semantic_error = None
+                try:
+                    bindings = await self.model.bind_answer(query, contract, retrieved.results)
+                    execution = check_and_execute(contract, bindings, retrieved.results)
+                except (ModelOutputError, ValueError) as error:
+                    semantic_error = str(error)
+                    self.call_metrics.record_error()
+                    bindings = None
+                    execution = None
+                    try:
+                        answer_table = await self.model.synthesize(query, retrieved.plan, retrieved.results)
+                        generated = render_table(answer_table)
+                        reasoning_trace.update(answer_path="semantic_binding_fallback_synthesis",
+                                               semantic_error=semantic_error,
+                                               answer_table=answer_table.model_dump(mode="json"))
+                        semantic = False
+                    except Exception as fallback_error:
+                        semantic_error += " | fallback=" + str(fallback_error)
+                        generated = "Insufficient evidence to determine the answer."
+                        reasoning_trace.update(answer_path="semantic_binding_failed", semantic_error=semantic_error)
+                initial_execution = execution.model_dump(mode="json") if execution else None
+                acquisition = {"stop_reason": "ready" if execution is not None and not execution.gaps else "disabled", "queries": []}
+                gap_action, retrieval_gaps = follow_up_gaps(execution) if execution is not None else ("ready", [])
+                # Open-world uncertainty is reported, but it is not an actionable
+                # premise gap. This prevents open-domain questions from paying for
+                # a second retrieval round that cannot prove global completeness.
+                if (retrieval_gaps and self.settings.open_domain_compat
+                        and reasoning_route.kind in {"set", "relation"}):
+                    retrieval_gaps = [g for g in retrieval_gaps if g.code != "member_scope_unknown"]
+                    if not retrieval_gaps:
+                        gap_action = "unresolved_scope"
+                if execution is not None and retrieval_gaps and (
+                        (gap_action == "reread" and self.settings.reread_enabled)
+                        or (gap_action == "retrieve" and self.settings.premise_retrieval_enabled)):
+                    remaining = int(answer_limit * .9) - sum(_cost(h) for h in retrieved.results)
+                    if gap_action == "reread":
+                        reread_sources, acquisition = reread_evidence(
+                            retrieved.results, turns=turns, session_id=session_id,
+                            blocked_events=blocked_events, budget=remaining,
+                            as_of=retrieved.plan.as_of,
+                            query=query, gaps=retrieval_gaps, bindings=bindings,
+                        )
+                        new_sources = reread_sources if acquisition.get("read_source_ids") else []
+                    else:
+                        gap_vectors = None
+                        if remaining > 0 and self.retriever.embedder is not None:
+                            queries = gap_queries(retrieved.plan, retrieval_gaps)
+                            raw = collect_raw_records(query, retrieved.plan, turns, session_id, blocked_events)
+                            if queries and raw:
+                                qv = await self.retriever.embedder.encode_query(queries)
+                                dv = await self.retriever.embedder.encode_documents([text for _, text in raw])
+                                gap_vectors = {record_key(r): [_cosine(q, d) for q in qv]
+                                               for (r,_),d in zip(raw,dv,strict=True)}
+                        new_sources, acquisition = retrieve_gaps(
+                            query, retrieved.plan, retrieval_gaps, retrieved.results,
+                            turns=turns, session_id=session_id, blocked_events=blocked_events, budget=remaining,
+                            semantic_scores=gap_vectors,
+                            candidate_hits=[*grounding_hits, *indexed_memory_hits(
+                                query, reasoning_route,
+                                eligible, retrieved.results, limit=32)],
+                            resolved_turns=resolved,
+                        )
+                    if new_sources and (allowance is None or allowance["normal_calls"] < allowance["max_calls"]):
+                        await self._check_version(scope, session_id, version)
+                        old_count = len(retrieved.results)
+                        if gap_action == "reread":
+                            combined = reread_sources
+                            changed_source_ids = acquisition.get("read_source_ids", [])
+                        else:
+                            combined = [*retrieved.results, *new_sources]
+                            changed_source_ids = []
+                        self.call_metrics.record("answer")
+                        try:
+                            revised = await self.model.bind_answer(
+                                query, contract, combined, previous=bindings,
+                                gaps=retrieval_gaps,
+                                source_offset=old_count,
+                                include_source_ids=changed_source_ids,
+                            )
+                            revised = merge_incremental(bindings, revised, {g.output_id for g in retrieval_gaps},
+                                                        sources=combined, contract=contract)
+                            revised_execution = check_and_execute(contract, revised, combined)
+                        except (ModelOutputError, ValueError) as error:
+                            # Keep the already validated initial result, never
+                            # manufacture a successful completion after failure.
+                            acquisition["stop_reason"] = "incremental_validation_failed"
+                            acquisition["validation_error"] = str(error)
+                            self.call_metrics.record_error()
+                        else:
+                            acquisition["answer_values_changed"] = revised_execution.values != execution.values
+                            acquisition["gap_count_before"] = len(execution.gaps)
+                            acquisition["gap_count_after"] = len(revised_execution.gaps)
+                            if gap_action == "reread":
+                                acquisition["stop_reason"] = ("reread_changed" if revised_execution.values != execution.values
+                                                              else "reread_no_change")
+                            bindings, execution = revised, revised_execution
+                            retrieved.results = combined
+                    elif new_sources:
+                        acquisition["stop_reason"] = "call_budget_exhausted"
+                if execution is not None:
+                    generated = execution.render(choice_question="Choose exactly one" in query)
+                    reasoning_trace.update(answer_path="semantic_execution", answer_contract=contract.model_dump(mode="json"),
+                                           bound_answer=bindings.model_dump(mode="json"), initial_execution=initial_execution,
+                                           execution=execution.model_dump(mode="json"), premise_retrieval=acquisition)
+                if allowance is not None:
+                    reasoning_trace["provider_request_budget"] = dict(allowance)
+                retrieved.selected_k = len(retrieved.results)
+                retrieved.context_tokens = sum(_cost(h) for h in retrieved.results)
+                grounding.final_sources = retrieved.selected_k
+                grounding.context_tokens_estimate = retrieved.context_tokens
+                cache_status = "disabled"
+                generation_ms = (time.perf_counter() - generation_started) * 1000
+            elif synthesis:
                 from .synthesis import render_table
                 self.call_metrics.record("answer")
                 try:
@@ -954,6 +1113,8 @@ class MemoryRuntime:
         if answer_table is not None:
             citations = sorted({ref.source_id for slot in answer_table.slots
                                 for value in slot.values for ref in value.supports})
+        if execution is not None:
+            citations = execution.source_ids
         warnings = list(retrieved.warnings)
         for update in updates:
             warnings.extend(update.get("evolution", {}).get("warnings", []))
@@ -987,7 +1148,8 @@ class MemoryRuntime:
                 generation_ms=generation_ms,
                 total_ms=(time.perf_counter() - started) * 1000,
                 context_tokens_before=before,
-                context_tokens_after=estimate_tokens(prompt),
+                context_tokens_after=(max(allowance["prompt_chars"], default=0) + 3) // 4
+                if semantic and allowance else estimate_tokens(prompt),
                 avoided_model_calls=int(cache_status in {"hit", "shared"}),
                 original_generation_ms=(
                     inference.generation_ms

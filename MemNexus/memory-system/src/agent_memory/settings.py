@@ -33,9 +33,11 @@ class Settings:
     local_owner: str = field(default_factory=lambda: os.getenv("MEMORY_LOCAL_OWNER", "demo"))
     pending_turns: int = 5
     context_turns: int = 15
-    window_token_limit: int = 6000
-    prompt_token_limit: int = 10000
-    complex_prompt_token_limit: int = 22000
+    window_token_limit: int = field(default_factory=lambda: _positive_int("MEMORY_WINDOW_TOKEN_LIMIT", 6000))
+    prompt_token_limit: int = field(default_factory=lambda: _positive_int("MEMORY_PROMPT_TOKEN_LIMIT", 10000))
+    complex_prompt_token_limit: int = field(
+        default_factory=lambda: _positive_int("MEMORY_COMPLEX_PROMPT_TOKEN_LIMIT", 22000)
+    )
     retrieval_token_limit: int = 3000
     max_top_k: int = 20
     max_candidates: int = 120
@@ -44,6 +46,27 @@ class Settings:
     )
     answer_synthesis_enabled: bool = field(
         default_factory=lambda: os.getenv("MEMORY_ANSWER_SYNTHESIS", "true").lower() in {"1", "true", "yes"}
+    )
+    semantic_execution_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_SEMANTIC_EXECUTION", "false").lower() in {"1", "true", "yes"}
+    )
+    semantic_execution_complex_only: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_SEMANTIC_COMPLEX_ONLY", "true").lower() in {"1", "true", "yes"}
+    )
+    premise_retrieval_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_PREMISE_RETRIEVAL", "true").lower() in {"1", "true", "yes"}
+    )
+    reread_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_REREAD_ENABLED", "true").lower() in {"1", "true", "yes"}
+    )
+    open_domain_compat: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_OPEN_DOMAIN_COMPAT", "true").lower() in {"1", "true", "yes"}
+    )
+    allow_assistant_evidence: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
+    )
+    semantic_max_answer_calls: int = field(
+        default_factory=lambda: _positive_int("MEMORY_SEMANTIC_MAX_ANSWER_CALLS", 2)
     )
     evidence_grounding_enabled: bool = field(
         default_factory=lambda: os.getenv("MEMORY_GROUNDING_ENABLED", "true").lower() in {"1", "true", "yes"}
@@ -92,6 +115,7 @@ class Settings:
             "max_top_k",
             "max_candidates",
             "grounding_max_raw_sources",
+            "semantic_max_answer_calls",
             "activation_ttl_seconds",
             "model_max_tokens",
             "inference_cache_max_entries",

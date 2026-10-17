@@ -6,6 +6,7 @@ initial schema small; indexed ownership, order and lifecycle fields stay relatio
 
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -385,6 +386,7 @@ class SQLiteStore:
             raise ValueError("Memory valid_from must be before valid_to")
         roles = []
         factual_sources = []
+        allow_assistant = os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
         for ref in item.evidence:
             row = self._db.execute(
                 "SELECT body FROM turns WHERE tenant=? AND owner=? AND session=? AND id=?",
@@ -397,12 +399,13 @@ class SQLiteStore:
                 raise ValueError("Evidence quote/index does not match source")
             roles.append(turn.events[ref.event_index].role)
             factual_sources.append(
-                turn.events[ref.event_index].role != "assistant"
+                (turn.events[ref.event_index].role != "assistant" or allow_assistant)
                 and not question_only(turn.events[ref.event_index].content)
             )
         if new_ids is not None and not any(e.turn_id in new_ids for e in item.evidence):
             raise ValueError("New memories must cite at least one pending turn")
-        if item.assertion in {"stated", "observed"} and set(roles) == {"assistant"}:
+        allow_assistant = os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
+        if item.assertion in {"stated", "observed"} and set(roles) == {"assistant"} and not allow_assistant:
             raise ValueError("Assistant output alone cannot establish a user or observed fact")
         if item.assertion in {"stated", "observed"} and all(
             question_only(ref.quote) for ref in item.evidence

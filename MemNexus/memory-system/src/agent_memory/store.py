@@ -153,6 +153,22 @@ class SQLiteStore:
             destination.unlink(missing_ok=True)
             raise
 
+    def base_counts(self) -> dict[str, int]:
+        """Row counts that define what a frozen memory base contains.
+
+        A snapshot is only a legitimate experimental condition if replaying it
+        reproduces these counts exactly; the manifest records them so a later
+        run can prove it is looking at the same base rather than a smaller one
+        that happened to open without error.
+        """
+        with self._lock:
+            return {
+                table: self._db.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+                # The vector projection lives in fact_projection; a base that
+                # lost it would still answer, just without semantic recall.
+                for table in ("sessions", "turns", "memories", "fact_projection")
+            }
+
     def create_session(self, scope: Scope, topic: str = "", project_id: str | None = None) -> Session:
         session = Session(session_id=new_id("session"), topic=topic, project_id=project_id)
         with self.transaction():

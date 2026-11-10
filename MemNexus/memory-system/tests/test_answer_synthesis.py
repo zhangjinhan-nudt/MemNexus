@@ -34,13 +34,41 @@ def test_all_conjuncts_rendered_and_quotes_checked():
     result = table()
     result.slots[0].values.append(table("blue", "blue").slots[0].values[0])
     validate_table(result, sources, ["colors"], "text")
-    assert render_table(result) == "red; blue"
+    assert render_table(result) == "red, blue"
 
 
 @pytest.mark.parametrize("result", [table(quote="green"), table(source_id=2), table(target="other")])
 def test_invalid_provenance_or_lost_target_rejected(result):
     with pytest.raises(ValueError):
         validate_table(result, [hit(turn(1, "red"))], ["colors"], "text")
+
+
+def test_quote_may_repeat_the_speaker_label_the_event_only_names_once():
+    # Real failure: the model cited a mid-utterance span and prefixed it with
+    # "Caroline: ", which the stored event only carries at the start. Rejecting
+    # that killed the whole answer call, so the question was lost at random.
+    source = hit(turn(1, "Caroline: Thanks, Melanie. Now I'm passionate about creating a safe place."))
+    result = table("safe place", "Caroline: Now I'm passionate about creating a safe place.")
+    validate_table(result, [source], ["colors"], "text")
+    assert render_table(result) == "safe place"
+
+
+def test_quote_tolerates_width_case_and_whitespace_only_differences():
+    source = hit(turn(1, "I prefer  RED and blue."))
+    validate_table(table("red", "i   prefer red"), [source], ["colors"], "text")
+
+
+@pytest.mark.parametrize("source_text, quote", [
+    # Different speaker: borrowing another speaker's words is a provenance error.
+    ("Melanie: Now I'm passionate about creating a safe place.",
+     "Caroline: Now I'm passionate about creating a safe place."),
+    # Same speaker, different words: a paraphrase is not a quote.
+    ("Caroline: Now I'm passionate about creating a safe place.",
+     "Caroline: Now I love building a safe place."),
+])
+def test_quote_still_rejects_other_speaker_or_paraphrase(source_text, quote):
+    with pytest.raises(ValueError):
+        validate_table(table("safe place", quote), [hit(turn(1, source_text))], ["colors"], "text")
 
 
 def test_duration_cannot_turn_into_event_enumeration():

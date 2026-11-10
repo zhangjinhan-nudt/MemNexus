@@ -78,3 +78,8 @@ Thumbs.db
 desktop.ini
 *.tmp
 *.temp
+
+# Local agent workspace and test temp
+.pytest_tmp/
+**/.pytest_basetemp/
+.workbuddy/

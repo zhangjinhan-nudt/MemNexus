@@ -33,11 +33,47 @@ sys.path.insert(0, str(ROOT / "MemNexus/memory-system/src"))
 CONFIG = Path(__file__).with_name("benchmark100_config.json")
 SYSTEMS = ("SimpleMem", "MemNexus")
 FIELDS = ("provider_attempts", "provider_errors", "input_tokens", "output_tokens", "cost_rmb")
+# 逐字移植自 SimpleMem 原论文 Appendix A.4（Listing 4: LLM-as-a-Judge Evaluation
+# Prompt）。口径是"宽松判分"：答案更长没关系，只要触及同一主题就算 CORRECT；
+# 时间只要指向同一日期/时段就算 CORRECT，格式不同（"May 7th" vs "7 May"）也算对。
+# 唯一改动是把三个模板占位符换成"下方 JSON 的字段名"，以及显式要求 reason 键
+# （parse_judgment 需要它）。判分倾向不得再改回 strict。
+# Canonical text: paper_protocol.JUDGE_INSTRUCTION (SimpleMem Appendix A.4).  This
+# copy differs in exactly two ways, both deliberate: the question/gold/prediction
+# are passed as a JSON payload instead of inline, and the judge must also return a
+# "reason" so a label can be audited.  Judge output is a DIAGNOSTIC here — the
+# paper uses this judge for LongMemEval-S only, never for LoCoMo.
 JUDGE_INSTRUCTION = (
-    "Judge whether the prediction correctly answers the question according to the gold answer. "
-    "Ignore style and accept semantically equivalent concise answers. Reject contradictions, "
-    "unsupported additions that change the answer, or missing core facts. "
-    "Return one JSON object with label CORRECT or WRONG and a short reason."
+    "Your task is to label an answer to a question as 'CORRECT' or 'WRONG'.\n"
+    "You will be given the following data:\n"
+    "(1) a question (posed by one user to another user),\n"
+    "(2) a 'gold' (ground truth) answer,\n"
+    "(3) a generated answer\n"
+    "which you will score as CORRECT/WRONG.\n"
+    "\n"
+    "The point of the question is to ask about something one user should know about the other\n"
+    "user based on their prior conversations.\n"
+    "The gold answer will usually be a concise and short answer that includes the referenced\n"
+    "topic, for example:\n"
+    "Question: Do you remember what I got the last time I went to Hawaii?\n"
+    "Gold answer: A shell necklace\n"
+    "The generated answer might be much longer, but you should be generous with your grading -\n"
+    "as long as it touches on the same topic as the gold answer, it should be counted as\n"
+    "CORRECT.\n"
+    "For time related questions, the gold answer will be a specific date, month, year, etc. The\n"
+    "generated answer might be much longer or use relative time references (like \"last\n"
+    "Tuesday\" or \"next month\"), but you should be generous with your grading - as long as\n"
+    "it refers to the same date or time period as the gold answer, it should be counted as\n"
+    "CORRECT. Even if the format differs (e.g., \"May 7th\" vs \"7 May\"), consider it CORRECT\n"
+    "if it's the same date.\n"
+    "Now it's time for the real question. The question, gold answer and generated answer are\n"
+    "given in the JSON below as \"question\", \"gold_answer\" and \"prediction\".\n"
+    "First, provide a short (one sentence) explanation of your reasoning, then finish with\n"
+    "CORRECT or WRONG.\n"
+    "Do NOT include both CORRECT and WRONG in your response, or it will break the evaluation\n"
+    "script.\n"
+    "Just return the label CORRECT or WRONG in a json format with the key as \"label\", and put\n"
+    "your one-sentence explanation under the key \"reason\"."
 )
 
 
@@ -110,10 +146,17 @@ def configure(value):
     sys.path.insert(0, str(ROOT / "SimpleMem"))
     config = importlib.import_module("config")
     settings = Settings()
+    # The model name is a configuration value, not a harness constant. Requiring
+    # the three roles to agree catches the real failure (a judge on a different
+    # model) without forcing a code edit whenever the model is upgraded.
+    model_names = {
+        "MemNexus": os.getenv("MEMORY_MODEL_NAME", "").strip(),
+        "SimpleMem": str(getattr(config, "LLM_MODEL", "")).strip(),
+        "judge": str(getattr(config, "JUDGE_MODEL", "")).strip(),
+    }
     checks = {
-        "MemNexus主模型": os.getenv("MEMORY_MODEL_NAME") == "deepseek-v4-flash",
-        "SimpleMem主模型": config.LLM_MODEL == "deepseek-v4-flash",
-        "裁判模型": config.JUDGE_MODEL == "deepseek-v4-flash",
+        "三个模型名已填写": all(model_names.values()),
+        "三个模型名一致": len(set(model_names.values())) == 1,
         "主模型及裁判Key已填写": bool(os.getenv("MEMORY_MODEL_API_KEY") and config.OPENAI_API_KEY
                                            and (config.JUDGE_API_KEY or config.OPENAI_API_KEY)),
         "温度为0": config.TEMPERATURE == 0,
@@ -121,15 +164,16 @@ def configure(value):
         "SimpleMem检索上限20": config.SEMANTIC_TOP_K == 20,
         "Qwen查询编码": os.getenv("MEMORY_EMBEDDING_ENCODING") == "query_prompt",
         "Qwen维度1024": config.EMBEDDING_MODEL == "Qwen/Qwen3-Embedding-0.6B" and config.EMBEDDING_DIMENSION == 1024,
-        "关闭思考模式": not config.ENABLE_THINKING and not config.JUDGE_ENABLE_THINKING,
+        "关闭思考模式": not config.ENABLE_THINKING and not config.JUDGE_ENABLE_THINKING
+                        and os.getenv("MEMORY_MODEL_DISABLE_THINKING", "true").lower() not in {"0", "false", "no", "off"},
         "输出上限4096": config.MAX_TOKENS == 4096,
     }
     if not all(checks.values()):
-        raise ValueError("配置预检失败：" + "、".join(k for k,v in checks.items() if not v))
+        failed = "、".join(k for k, v in checks.items() if not v)
+        raise ValueError(f"配置预检失败：{failed}（实际模型名：{model_names}）")
     config.INPUT_PRICE_RMB_PER_MILLION_TOKENS = 2.4
     config.OUTPUT_PRICE_RMB_PER_MILLION_TOKENS = 9.6
     from run_locomo_pilot import CATEGORY_NAMES
-    CATEGORY_NAMES.update({1:"multi-hop",2:"temporal",3:"open-domain",4:"single-hop",5:"adversarial"})
     # Include only public settings. config.py/.env must not enter the source zip.
     public = {k:getattr(config,k) for k in (
         "LLM_MODEL", "JUDGE_MODEL", "TEMPERATURE", "MAX_TOKENS", "WINDOW_SIZE", "OVERLAP_SIZE",
@@ -141,7 +185,7 @@ def configure(value):
                   open_domain_compat=settings.open_domain_compat,
                   semantic_max_answer_calls=settings.semantic_max_answer_calls,
                   collection_queries=settings.collection_queries_enabled,
-                  model="deepseek-v4-flash", prices_rmb_per_million=[2.4,9.6], answer_cache=False,
+                  model=model_names["SimpleMem"], prices_rmb_per_million=[2.4,9.6], answer_cache=False,
                   planner_mode="model", output_language="en", embedding_encoding="query_prompt",
                   memnexus_pending_turns=5, memnexus_context_turns=15,
                   max_session_policy="cohort.max_session", sequential=True)
@@ -325,8 +369,10 @@ def judge_one(row, folder, cap):
     judge=LLMClient(api_key=config.JUDGE_API_KEY or config.OPENAI_API_KEY,model=config.JUDGE_MODEL,
                     base_url=config.JUDGE_BASE_URL,enable_thinking=False,use_streaming=False)
     payload=json.dumps({k:row[k] for k in ("question","gold_answer","prediction")},ensure_ascii=False)
-    messages=[{"role":"system","content":"You are a strict blinded QA evaluator."},
-              {"role":"user","content":JUDGE_INSTRUCTION+"\n"+payload}]
+    # The paper issues a single user message; a "strict" system prompt would
+    # contradict its explicitly generous grading stance, so none is prepended.
+    # Blindness still holds: the payload carries no system name.
+    messages=[{"role":"user","content":JUDGE_INSTRUCTION+"\n"+payload}]
     failures=[]
     try:
         for attempt in range(2):
@@ -352,7 +398,7 @@ def annotate_stage(stage,rows,items):
         row.update(qa_index=item["qa_index"],gold_evidence=item["evidence"])
 
 
-async def execute(folder,report,cohort,dataset,cap):
+async def execute(folder,report,cohort,dataset,cap,snapshots=None,require_snapshots=False):
     from run_locomo_pilot import run_simplemem,run_memnexus
     units=[]
     for index in sorted({q["sample_index"] for q in cohort["questions"]}):
@@ -381,7 +427,7 @@ async def execute(folder,report,cohort,dataset,cap):
                 if system=="SimpleMem":
                     stage,rows=run_simplemem(sample,questions,allowed,usage_ledger=attempt/"usage.json",max_session=cohort["max_session"])
                 else:
-                    stage,rows=await run_memnexus(sample,questions,allowed,usage_ledger=attempt/"usage.json",max_session=cohort["max_session"])
+                    stage,rows=await run_memnexus(sample,questions,allowed,usage_ledger=attempt/"usage.json",max_session=cohort["max_session"],snapshot_dir=snapshots,require_snapshot=require_snapshots)
             annotate_stage(stage,rows,items)
             save(attempt/"stage_result.json",{"stage":stage,"rows":rows,"ledger":"usage.json"})
             report["stages"][unit]=(attempt/"stage_result.json").relative_to(folder).as_posix()
@@ -421,11 +467,16 @@ async def run(args):
     if args.budget is not None:value["budget_rmb"]=args.budget
     if not math.isfinite(value["budget_rmb"]) or value["budget_rmb"]<=0:raise ValueError("预算必须为正数")
     if args.variant:value["variant"]=args.variant
+    # A frozen base is an experimental condition: runs that replayed a snapshot
+    # and runs that built from scratch must never be resumed into each other.
+    snapshots=(args.memory_snapshots.resolve() if args.memory_snapshots else None)
+    if args.require_snapshots and snapshots is None:raise ValueError("--require-snapshots 需要同时给出 --memory-snapshots")
     cohort,dataset=load_cohort(ROOT/value["cohort"])
     public=configure(value)
     files=source_files()
     signature={"dataset":cohort["dataset_sha256"],"selection":cohort["selection_sha256"],
-               "source_sha256":files,"settings":public,"judge_seed":value["judge_seed"]}
+               "source_sha256":files,"settings":public,"judge_seed":value["judge_seed"],
+               "memory_snapshots":str(snapshots) if snapshots else None}
     progress(f"本地预检通过：100题，{cohort['conversation_count']}段对话，D1–D{cohort['max_session']}，预算¥{value['budget_rmb']:.2f}")
     progress(f"MemNexus语义执行={public['semantic_execution']}；缺口补检索={public['premise_retrieval']}")
     if args.dry_run:
@@ -471,7 +522,7 @@ async def run(args):
                 return 0
             report["embedding_preflight"]={"health":health,"vectors_match":True}
             save(folder/"run.json",report)
-            await execute(folder,report,cohort,dataset,value["budget_rmb"])
+            await execute(folder,report,cohort,dataset,value["budget_rmb"],snapshots,args.require_snapshots)
             if source_files()!=files:
                 report["invalidated"]="source_changed_during_run"
                 raise RuntimeError("测试过程中源码发生变化。结果保留，但不能合并为同一版本的完整实验。")
@@ -508,6 +559,8 @@ def cli():
     parser.add_argument("--report-only",help="仅从指定结果目录重新审计和绘图，不调用API")
     parser.add_argument("--budget",type=float,help="覆盖本轮总预算，含已失败尝试及裁判")
     parser.add_argument("--variant",choices=["configured","stable","semantic"])
+    parser.add_argument("--memory-snapshots",type=Path,help="MemNexus 记忆库快照目录：命中则跳过建库，未命中则建库后冻结")
+    parser.add_argument("--require-snapshots",action="store_true",help="快照缺失时中止，禁止静默重建记忆库")
     parser.add_argument("--dry-run",action="store_true",help="仅本地检查，不联网、不收费")
     parser.add_argument("--preflight-only",action="store_true",help="检查配置及本地Qwen，不调用付费模型")
     parser.add_argument("--no-open",action="store_true")

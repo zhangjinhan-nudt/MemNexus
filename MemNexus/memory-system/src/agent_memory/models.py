@@ -278,8 +278,13 @@ class QueryPlan(Contract):
     as_of: datetime | None = None
     # Deterministic query routing, filled after the model plan and therefore
     # never trusted as a permission or truth decision by itself.
+    # ``recommendation`` is produced by reasoning.classify_question (see the
+    # recall_policy branch there), so it must be accepted here — otherwise the
+    # value survives model_copy(update=...) unchecked and only explodes later
+    # in SQLiteStore.save_answer, taking down the whole run.
     query_type: Literal[
-        "fact", "temporal", "relation", "causal", "set", "count", "inference", "adversarial"
+        "fact", "temporal", "relation", "causal", "set", "count",
+        "inference", "recommendation", "adversarial",
     ] = "fact"
     recall_policy: Literal["focused", "recall_first"] = "focused"
     query_entities: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=12)
@@ -288,6 +293,25 @@ class QueryPlan(Contract):
     )
     collection_query: CollectionQuery | None = None
     answer_contract: AnswerContract | None = None
+
+    @field_validator("query_type", mode="before")
+    @classmethod
+    def known_query_type(cls, value: object) -> object:
+        """Any future router label degrades to ``fact`` instead of raising.
+
+        A single unknown label used to abort an entire benchmark run from
+        inside a persistence call, far away from the router that produced it.
+        Degrading keeps the run alive and stays on the generic answering path.
+        """
+        if value is None or value == "":
+            return "fact"
+        if isinstance(value, str):
+            allowed = {
+                "fact", "temporal", "relation", "causal", "set", "count",
+                "inference", "recommendation", "adversarial",
+            }
+            return value if value in allowed else "fact"
+        return value
 
     @field_validator("as_of")
     @classmethod
@@ -407,6 +431,21 @@ class ModelCallTrace(Contract):
     errors: int = Field(default=0, ge=0)
 
 
+class BoundedInference(Contract):
+    """One explicitly-labelled inference, never promoted to an observed fact.
+
+    The gate that may request it is deterministic (empty answer, non-adversarial
+    question, subject present in the evidence). The contract keeps the premise
+    so a reader can reject the step without re-reading every source.
+    """
+
+    abstain: bool = False
+    answer: str = Field(default="", max_length=400)
+    basis: str = Field(default="", max_length=600)
+    confidence: Literal["high", "medium", "low"] = "low"
+    missing: str = Field(default="", max_length=300)
+
+
 class GroundingTrace(Contract):
     enabled: bool = False
     initial_sources: int = 0
@@ -423,6 +462,8 @@ class GroundingTrace(Contract):
     raw_vector_inputs: int = 0
     raw_vector_reused: int = 0
     raw_sources_selected: int = 0
+    subject_recall_candidates: int = 0
+    subject_recall_added: int = 0
     initial_missing_info: list[str] = Field(default_factory=list)
     final_missing_info: list[str] = Field(default_factory=list)
     coverage_measurement: str = "lexical_support_not_entailment"

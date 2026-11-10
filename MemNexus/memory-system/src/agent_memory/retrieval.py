@@ -314,7 +314,11 @@ class Retriever:
         warnings: list[str] = []
         steps: list[QueryStep] = []
         now = utcnow()
-        use_model_planner = self.model is not None
+        # "rule" removes the planning call entirely. The deterministic planner
+        # already handles intent, list/count/negative shape and time filters;
+        # the provider plan only adds semantic query variants. Which of the two
+        # is worth its tokens is a measured question, not an assumption.
+        use_model_planner = self.model is not None and self.settings.planner_mode != "rule"
         if self.settings.planner_mode == "adaptive" and self._rule_planner_confident(
             query, plan, session, short + long, now
         ):
@@ -350,6 +354,33 @@ class Retriever:
                 warnings.append("model_planner_schema_error: fell back to rule planner")
         elif self.model is None:
             warnings.append("rule_planner: semantic intent and evidence sufficiency are not verified")
+
+        # Optional one-call bridge (MEMORY_LLM_BRIDGE=1). Failure degrades to
+        # the flag-off behaviour: empty terms, no new warnings level, no error.
+        if self.settings.llm_bridge_enabled and self.model is not None:
+            from .llm_bridge import bridge_terms
+            try:
+                bridge = await bridge_terms(
+                    self.model, query, list(plan.keywords), list(plan.semantic_queries),
+                    limit=self.settings.llm_bridge_max_terms,
+                )
+            except Exception as error:  # timeout / malformed output / provider down
+                bridge = []
+                warnings.append(f"llm_bridge_error:{type(error).__name__}")
+            if bridge:
+                # QueryPlan.semantic_queries is capped at 3 by the contract;
+                # overflow bridge terms must go into keywords, otherwise the
+                # plan fails schema validation and the whole answer aborts.
+                slots = max(0, 3 - len(plan.semantic_queries))
+                queries = list(plan.semantic_queries) + bridge[:slots]
+                keywords = list(dict.fromkeys([
+                    *plan.keywords, *bridge[slots:],
+                ]))[:30]
+                plan = plan.model_copy(update={
+                    "semantic_queries": queries,
+                    "keywords": keywords,
+                })
+                warnings.append("llm_bridge:" + "|".join(bridge))
 
         # The provider plan supplies semantic detail; this deterministic route
         # decides the retrieval policy from the question form. It cannot grant

@@ -335,6 +335,87 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ModelOutputError, "empty content"):
                 await model.answer("prompt")
 
+    async def test_proxy_host_still_disables_reasoning(self):
+        """A proxy gateway must not lose the directive just because of its hostname."""
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "hello"}}]})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            model = OpenAICompatibleModel(
+                base_url="https://www.tokenav.ai/v1",
+                model="deepseek-v4.1-flash",
+                api_key="mock-key",
+                client=client,
+            )
+            self.assertEqual(model.provider, "openai_compatible")
+            self.assertTrue(model.disable_thinking)
+            await model.answer("prompt")
+        self.assertEqual(json.loads(requests[0].content)["thinking"], {"type": "disabled"})
+
+    async def test_reasoning_directive_can_be_switched_off(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "hello"}}]})
+
+        with patch.dict(os.environ, {"MEMORY_MODEL_DISABLE_THINKING": "false"}):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                model = OpenAICompatibleModel(
+                    base_url="https://www.tokenav.ai/v1",
+                    model="deepseek-v4.1-flash",
+                    api_key="mock-key",
+                    client=client,
+                )
+                self.assertFalse(model.disable_thinking)
+                await model.answer("prompt")
+        self.assertNotIn("thinking", json.loads(requests[0].content))
+
+    async def test_rejected_reasoning_directive_is_dropped_once(self):
+        """A gateway that 400s on unknown fields must not fail the whole run."""
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if "thinking" in json.loads(request.content):
+                return httpx.Response(400, json={"error": {"message": "unknown field thinking"}})
+            return httpx.Response(200, json={"choices": [{"message": {"content": "hello"}}]})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            model = OpenAICompatibleModel(
+                base_url="https://www.tokenav.ai/v1",
+                model="deepseek-v4.1-flash",
+                api_key="mock-key",
+                client=client,
+            )
+            self.assertEqual(await model.answer("prompt"), "hello")
+        self.assertEqual(len(requests), 2)
+        self.assertIn("thinking", json.loads(requests[0].content))
+        self.assertNotIn("thinking", json.loads(requests[1].content))
+
+    async def test_empty_answer_reports_the_reasoning_trace(self):
+        """An empty content caused by an unbounded trace must say so."""
+        payload = {
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": "", "reasoning_content": "thinking very hard"},
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 4096},
+        }
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+        ) as client:
+            model = OpenAICompatibleModel(
+                base_url="https://www.tokenav.ai/v1", model="deepseek-v4.1-flash", client=client
+            )
+            with self.assertRaisesRegex(ModelOutputError, "reasoning trace"):
+                await model.answer("prompt")
+
     async def test_factory_unconfigured_partial_and_local_endpoint(self):
         empty = {"MEMORY_MODEL_BASE_URL": "", "MEMORY_MODEL_NAME": "", "MEMORY_MODEL_API_KEY": ""}
         with patch.dict(os.environ, empty):

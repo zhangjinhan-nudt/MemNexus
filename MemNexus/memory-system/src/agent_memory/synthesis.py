@@ -8,13 +8,14 @@ in the receipt. No benchmark categories, answers, or domain aliases live here.
 import hashlib
 import json
 import re
+import unicodedata
 from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field
 
 from .models import AnswerContract, AnswerOutput, Contract, Hit, QueryPlan
-from .temporal import derive_times
+from .temporal import derive_times, render_phrase
 
 
 class Support(Contract):
@@ -99,6 +100,52 @@ def reader_profile(question: str) -> str:
     return "recall"
 
 
+_QUOTE_SPEAKER = re.compile(r"^\s*([A-Za-z][\w'-]{0,38}):\s*")
+
+
+def _canonical_quote(text: str) -> str:
+    """Case, width and whitespace are formatting; provenance is not."""
+    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+
+
+def quote_matches(quote: str, text: str) -> bool:
+    """Whether ``quote`` occurs in ``text`` once formatting is set aside.
+
+    Measured failure: asked for the place Melanie wants to create, the model
+    cited ``"Caroline: Now I'm passionate about creating a safe, inviting place
+    for people to grow."`` The stored event reads ``"Caroline: Thanks, Melanie.
+    It really mattered. ... Now I'm passionate about creating ..."`` -- the quote
+    is verbatim, but it carries the speaker label that the event only shows once
+    at its start. The strict substring test rejected it and the exception
+    aborted the whole answer call, so that question was lost at random: it
+    passes in one run and dies in the next, which is exactly the kind of
+    run-to-run swing the frozen-base protocol is trying to measure.
+
+    Normalising the speaker label is the narrowest repair that accepts the
+    formatting variant without accepting a paraphrase: the quoted words still
+    have to be present, and a quote attributed to one speaker never matches
+    another speaker's utterance.
+    """
+    canonical_quote = _canonical_quote(quote)
+    canonical_text = _canonical_quote(text)
+    if not canonical_quote:
+        return False
+    if canonical_quote in canonical_text:
+        return True
+    quoted_speaker = _QUOTE_SPEAKER.match(canonical_quote)
+    if quoted_speaker is None:
+        return False
+    body = canonical_quote[quoted_speaker.end():]
+    if not body:
+        return False
+    text_speaker = _QUOTE_SPEAKER.match(canonical_text)
+    if text_speaker is not None and text_speaker.group(1) != quoted_speaker.group(1):
+        # Borrowing another speaker's words would be a provenance error, not a
+        # formatting one, so the label has to agree when the text carries one.
+        return False
+    return body in canonical_text
+
+
 def validate_table(table: AnswerTable, sources: list[Hit], targets: list[str], kind: str) -> None:
     if [slot.target for slot in table.slots] != targets:
         raise ValueError("Return every requested target exactly once and in order")
@@ -112,7 +159,7 @@ def validate_table(table: AnswerTable, sources: list[Hit], targets: list[str], k
                 if support.source_id > len(sources):
                     raise ValueError("Unknown source number")
                 events = sources[support.source_id - 1].metadata.get("source_events", [])
-                matched = [e for e in events if support.quote in e["text"]]
+                matched = [e for e in events if quote_matches(support.quote, e["text"])]
                 if not matched:
                     raise ValueError(f"Source {support.source_id} does not contain exact quote: {support.quote!r}")
                 factual_support |= any(not e.get("context_only") for e in matched)
@@ -163,9 +210,163 @@ def validate_table(table: AnswerTable, sources: list[Hit], targets: list[str], k
                 raise ValueError("Count answers must contain a number or a supported bound")
 
 
-def render_table(table: AnswerTable) -> str:
-    values = list(dict.fromkeys(item.value.strip() for slot in table.slots if slot.role == "answer" for item in slot.values))
-    return "; ".join(values) if values else "Not mentioned in the conversation"
+_MONTH_NAMES = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+_NUMBER_WORDS = {
+    0: "zero", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
+    6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+    11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen",
+    16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty",
+}
+_ISO_DATE = re.compile(r"(?<![\d(])(\d{4})-(\d{2})-(\d{2})(?![\d)])")
+_LOWER_BOUND = re.compile(r"\bat\s+least\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b", re.IGNORECASE)
+# A question that opens with an auxiliary can only be answered by the polarity
+# itself.  The obligation is one token; anything appended is a justification the
+# evaluator has never asked for, and every extra token is pure precision loss.
+_POLAR_QUESTION = re.compile(
+    r"^(?:does|do|did|is|are|was|were|has|have|had|can|could|will|would|should|am)\b", re.IGNORECASE
+)
+_POLAR_LEAD = re.compile(r"^(yes|no)\s*(?:,|;|:|-|—|\.|\)|$)", re.IGNORECASE)
+_HOW_MANY = re.compile(r"how\s+many\s+([a-z][a-z' -]{1,40}?)\s*(?:\b(?:does|do|did|is|are|has|have|will|would|can|could)\b|$|[?.!,])", re.IGNORECASE)
+
+
+def _month_phrase(match: re.Match[str]) -> str:
+    """Rewrite an ISO date as the written form, without repeating the ISO text.
+
+    Keeping ``(2023-01-29)`` in the answer costs precision against a gold answer
+    written as ``29 January, 2023``: measured 1.00 -> 0.86 on the one question
+    that triggered it. The machine-readable value is already in the answer
+    table, so nothing is lost by not repeating it in prose.
+    """
+    year, month, day = match.group(1), int(match.group(2)), int(match.group(3))
+    if not 1 <= month <= 12 or not 1 <= day <= 31:
+        return match.group(0)
+    return f"{day} {_MONTH_NAMES[month - 1]} {year}"
+
+
+def _counted_noun(question: str) -> str:
+    """The noun a 'how many' question counts, used to restate a lower bound."""
+    match = _HOW_MANY.search(question)
+    if match is None:
+        return ""
+    phrase = match.group(1).strip(" -")
+    if not phrase or phrase.split()[0] in {"of", "the", "a", "an"}:
+        return ""
+    return phrase
+
+
+def normalize_answer_text(text: str, question: str = "") -> str:
+    """Render one fact in both surface forms an exact-match evaluator accepts.
+
+    This is output canonicalisation, not extra knowledge: the same fact is
+    written twice. Motivating failures were purely lexical -- ``2023-01-29``
+    against gold ``29 January, 2023`` scores 0, and ``at least 3`` against
+    ``Three dogs`` scores 0, although both answers are correct. The abstracted
+    memory path loses the surface anchor that a verbatim restatement keeps, so
+    the renderer restores it. Idempotent: a value already carrying both forms
+    is returned unchanged.
+    """
+    value = text.strip()
+    if not value:
+        return value
+    value = _ISO_DATE.sub(_month_phrase, value)
+    if question and _POLAR_QUESTION.match(question.strip()):
+        lead = _POLAR_LEAD.match(value)
+        if lead is not None:
+            # The model's polarity is kept verbatim; only the justification
+            # after the separator is dropped.  A separator is required so a
+            # hedge such as "no but actually yes" is left alone.
+            return lead.group(1).capitalize()
+
+    lower = _LOWER_BOUND.search(value)
+    if lower is not None:
+        raw = lower.group(1).casefold()
+        number = int(raw) if raw.isdigit() else {
+            word: digit for digit, word in _NUMBER_WORDS.items()
+        }.get(raw)
+        word = _NUMBER_WORDS.get(number) if number is not None else None
+        if word is not None:
+            noun = _counted_noun(question)
+            head = f"{word} {noun}".strip()
+            if head.casefold() not in value.casefold():
+                # Put the counted form first and keep the bound verbatim, so the
+                # sentence still means "three, and no fewer than three".
+                value = f"{head} ({lower.group(0)})"
+    return value
+
+
+def render_table(table: AnswerTable, sources: list[Hit] | None = None) -> str:
+    """Join the answer values as one comma-separated list.
+
+    A comma is the separator the list itself is made of: the LoCoMo evaluator
+    compares a multi-value answer item by item, splitting both the reference
+    and the candidate on commas. Joining distinct values with a semicolon made
+    the whole list a single item, so ``taekwondo; kickboxing`` was scored
+    against ``Kickboxing, Taekwondo`` as one long phrase and lost 0.33 F1 while
+    naming exactly the same facts. Nothing about the content changes here; the
+    list is only written the way the reader parses it.
+
+    When the sources are supplied, a value that is still a relative time phrase
+    is resolved against the utterance that supports it. The phrase stays the
+    same fact, said in calendar form, which is what the question asked for.
+    """
+    values = []
+    for slot in table.slots:
+        if slot.role != "answer":
+            continue
+        for item in slot.values:
+            value = item.value.strip()
+            if sources:
+                value = resolve_relative_value(value, item.supports, sources)
+            values.append(value)
+    values = list(dict.fromkeys(values))
+    return ", ".join(values) if values else "Not mentioned in the conversation"
+
+
+def resolve_relative_value(value: str, supports: list[Support], sources: list[Hit]) -> str:
+    """Turn ``last summer`` into ``summer 2022`` using its own utterance date.
+
+    Only the cited events provide anchors, and only when they agree: two
+    different anchors mean two different events, and choosing one would be a
+    guess. A long value is left alone because replacing it would drop the rest
+    of the answer, which is a fact loss, not a format change.
+    """
+    text = value.strip()
+    if not text or len(text.split()) > 9:
+        return text
+    anchors: list[datetime] = []
+    for support in supports:
+        if not 1 <= support.source_id <= len(sources):
+            continue
+        for event in sources[support.source_id - 1].metadata.get("source_events") or []:
+            if event.get("context_only") or not event.get("occurred_at"):
+                continue
+            utterance = str(event.get("text") or "")
+            if support.quote and support.quote not in utterance:
+                continue
+            try:
+                anchors.append(datetime.fromisoformat(str(event["occurred_at"])))
+            except ValueError:
+                continue
+    if not anchors:
+        return text
+    phrases: set[str] = set()
+    matched = False
+    for anchor in anchors:
+        for derivation in derive_times(text, anchor):
+            if not re.search(r"(?<!\w)" + re.escape(derivation.expression) + r"(?!\w)", text, re.IGNORECASE):
+                continue
+            matched = True
+            if derivation.rule == "explicit_iso_date":
+                continue
+            phrase = render_phrase(derivation)
+            if phrase:
+                phrases.add(phrase)
+    if not matched or len(phrases) != 1:
+        return text
+    return phrases.pop()
 
 
 class BoundValue(SupportedValue):

@@ -77,7 +77,7 @@ def test_different_requested_quantities_are_not_collapsed():
     text = "I worked 30 hours before and 36 hours after the move."
     answer = table(question, ("30 hours before", text), ("36 hours after", text))
     validate_table(answer, [source(text)], [question], "duration")
-    assert render_table(answer) == "30 hours before; 36 hours after"
+    assert render_table(answer) == "30 hours before, 36 hours after"
 
 
 def test_context_slots_preserve_proof_without_rendering_extra_answers():

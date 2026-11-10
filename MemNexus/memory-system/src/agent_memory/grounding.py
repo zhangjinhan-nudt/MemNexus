@@ -473,6 +473,15 @@ def reread_evidence(sources, *, turns, session_id, blocked_events, budget, as_of
     }
 
 
+def missing_required_info(hits: list[Hit], required: list[str]) -> list[str]:
+    """Which required slots the current evidence does not cover (public wrapper).
+
+    This is a retrieval heuristic, not a proof of absence: it decides whether a
+    subject-scoped recall round is worth one local embedding pass.
+    """
+    return _missing(hits, required)
+
+
 def ground_evidence(
     query: str,
     plan: QueryPlan,
@@ -487,6 +496,7 @@ def ground_evidence(
     budget: int = 5000,
     candidate_limit: int = 120,
     semantic_scores: dict[str, float] | None = None,
+    must_include: set[str] | None = None,
 ) -> GroundedResult:
     started = time.perf_counter()
     trace = GroundingTrace(enabled=True, initial_sources=len(hits))
@@ -673,6 +683,36 @@ def ground_evidence(
     focus_terms = normalized_terms(query) - {
         term for entity in requested_entities for term in normalized_terms(entity)
     }
+    if must_include:
+        # A subject-keyed recall pass can find a fact that no topical ranking
+        # places in the top-k: the query says "martial arts", the stored fact
+        # says "kickboxing". Keep those hits unless the prompt budget is spent;
+        # the loop below still chooses the remaining slots competitively.
+        trace.subject_recall_candidates = len(must_include)
+        for hit in hydrated:
+            if str(hit.metadata.get("memory_id") or "") not in must_include:
+                continue
+            if any(existing is hit for existing in selected):
+                continue
+            cost = _cost(hit)
+            if len(selected) >= max_sources or used + cost > budget:
+                continue
+            selected.append(hit)
+            used += cost
+            trace.subject_recall_added += 1
+            covered.update(terms(hit.content) & wanted)
+            seen_events.update(
+                (record["turn_id"], record["event_index"]) for record in hit.metadata.get("source_events", [])
+            )
+            predicate = str(hit.metadata.get("predicate") or "").casefold()
+            if predicate:
+                covered_predicates.add(predicate)
+            subject_text = str(hit.metadata.get("subject") or "").casefold()
+            covered_entities.update(
+                entity
+                for entity in requested_entities
+                if re.search(r"(?<!\w)" + re.escape(entity) + r"(?!\w)", subject_text)
+            )
 
     def fields_and_entities(hit: Hit) -> tuple[set[str], set[str]]:
         subject = str(

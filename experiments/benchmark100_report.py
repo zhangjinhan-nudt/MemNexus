@@ -19,6 +19,7 @@ import numpy as np
 from analyze_locomo_disjoint import configure_chinese_font
 from analyze_optimized_comparison import cluster_ci, locomo_score, mcnemar
 from benchmark100 import FIELDS, SYSTEMS, digest, parse_judgment, read, save
+from paper_protocol import common_subset, paper_table, render_markdown
 
 LABELS={1:"多跳",2:"时间",3:"开放域",4:"单跳",5:"对抗"}
 COLORS=("#D18A35","#2478AE")
@@ -28,7 +29,7 @@ def equal(a,b):
     return math.isclose(a,b,abs_tol=1e-8,rel_tol=1e-10)
 
 
-def ledger_audit(path):
+def ledger_audit(path, expected_model=None):
     ledger=read(path)
     events=[json.loads(s) for s in path.with_suffix(".calls.jsonl").read_text(encoding="utf-8").splitlines()]
     req=[e for e in events if e["event"]=="request"]
@@ -61,8 +62,14 @@ def ledger_audit(path):
             unaccounted=0
     if unaccounted or ledger.get("reserved_rmb",0):
         raise ValueError(f"账本请求未结算：{path}")
-    if not all(e["body"]["model"]=="deepseek-v4-flash" and e["body"]["temperature"]==0 for e in req):
-        raise ValueError("调用的模型/温度不符合协议。")
+    if not all(e["body"]["temperature"]==0 for e in req):
+        raise ValueError("调用的温度不符合协议。")
+    models={e["body"]["model"] for e in req}
+    if expected_model:
+        if models != {expected_model}:
+            raise ValueError(f"调用模型与运行签名不符：{sorted(models)} != {expected_model!r}")
+    elif len(models) != 1:
+        raise ValueError(f"同一次运行出现多个模型：{sorted(models)}")
     if any(not e["body"].get("usage") for e in responses):raise ValueError("已响应调用缺少usage。")
     for name,field in (("input_tokens","prompt_tokens"),("output_tokens","completion_tokens")):
         if sum(e["body"]["usage"].get(field,0) for e in responses)!=ledger[name]:
@@ -77,6 +84,8 @@ def audit(folder):
     report=read(folder/"run.json")
     if report.get("invalidated"):
         raise ValueError("运行中代码变化，实验版本不一致；请新建测试。")
+    # The expected model comes from the run signature, never from a literal.
+    expected_model=(report.get("signature") or {}).get("settings",{}).get("model")
     cohort=report["cohort"]
     expected={(q["sample_id"],q["qa_index"],s) for q in cohort["questions"] for s in SYSTEMS}
     samples={q["sample_id"] for q in cohort["questions"]}
@@ -101,7 +110,7 @@ def audit(folder):
         raw=memory.get("turns",memory.get("raw_turns",[]))
         if len(raw)!=stage["raw_turns"]:raise ValueError("原始话轮计数不一致。")
         ledger_path=path.parent/"usage.json"
-        ledger,_=ledger_audit(ledger_path)
+        ledger,_=ledger_audit(ledger_path, expected_model)
         if ledger.get("audit_recovery"):
             recoveries.append(ledger["audit_recovery"])
         successful_ledgers.add(ledger_path)
@@ -131,7 +140,7 @@ def audit(folder):
         verdict=parse_judgment(judgment["judge_raw_response"])
         if verdict["label"]!=judgment["judge_result"]:raise ValueError("裁判标签不匹配。")
         ledger_path=path.parent/"usage.json"
-        ledger,responses=ledger_audit(ledger_path)
+        ledger,responses=ledger_audit(ledger_path, expected_model)
         if not any(e["body"]["choices"][0]["message"]["content"]==judgment["judge_raw_response"] for e in responses):
             raise ValueError("裁判结果不在真实响应中。")
         events=[json.loads(s) for s in ledger_path.with_suffix(".calls.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -250,29 +259,62 @@ def generate(folder):
     if folder.is_file():folder=folder.parent
     report,rows,stages,checked=audit(folder)
     stats,paired=summarize(rows,stages)
+    # Paper protocol is a paired comparison: restrict to questions both systems
+    # answered, otherwise a crash/resume leaves them on different item sets.
+    paired_rows=common_subset(rows,SYSTEMS)
+    paper=paper_table(paired_rows)
+    paper_unpaired=paper_table(rows)
     save(folder/"results.json",{"rows":rows,"stages":stages,"cohort":report["cohort"]})
-    summary={"stats":stats,"paired":paired,"audit":checked,"settings":report["signature"]["settings"]}
+    summary={"stats":stats,"paired":paired,"audit":checked,"settings":report["signature"]["settings"],
+             "paper_protocol":paper,"paper_protocol_unpaired":paper_unpaired,
+             "paper_protocol_paired_questions":len(paired_rows)//max(len(SYSTEMS),1)}
     save(folder/"summary.json",summary)
     figures(folder,stats,paired,rows)
     lo,hi=paired["cluster_95ci_pp"]
-    conclusion=("观察到MemNexus正确率领先，聚类区间高于0。仍需独立泛化验证。" if lo>0 else
-                "观察到SimpleMem正确率领先，聚类区间低于0。" if hi<0 else
-                "聚类置信区间跨过0，不能据此声称显著优势或两者等效。")
+    # 结论以论文口径的 Average F1 为准；LLM judge 在 LoCoMo 上不是主指标。
+    mn_paper=paper["systems"].get("MemNexus") or {}
+    sm_paper=paper["systems"].get("SimpleMem") or {}
+    if mn_paper.get("average_f1") is not None and sm_paper.get("average_f1") is not None:
+        delta=100*(mn_paper["average_f1"]-sm_paper["average_f1"])
+        conclusion=("论文口径 Average F1：MemNexus 领先 %.2f 个点。仍需独立泛化验证。"%delta if delta>0 else
+                    "论文口径 Average F1：MemNexus 落后 %.2f 个点。主要差距见分题型一栏。"%(-delta) if delta<0 else
+                    "论文口径 Average F1 两者持平。")
+    else:
+        conclusion=("观察到MemNexus正确率领先，聚类区间高于0。仍需独立泛化验证。" if lo>0 else
+                    "观察到SimpleMem正确率领先，聚类区间低于0。" if hi<0 else
+                    "聚类置信区间跨过0，不能据此声称显著优势或两者等效。")
     labels=[("正确题数","correct",".0f"),("非对抗题LoCoMo词面F1","nonadversarial_locomo_f1",".4f"),
             ("简化BLEU-1（历史runner口径）","simple_bleu1",".4f"),("问答tokens","qa_tokens",",.0f"),
             ("含建库tokens","main_tokens",",.0f"),("建库＋问答费用（元）","main_cost_rmb",".4f"),
             ("每正确答案费用（元）","cost_per_correct",".4f"),("回答P50秒","p50_seconds",".3f"),
             ("回答P95秒","p95_seconds",".3f"),("建库总秒数","build_seconds",".1f"),("问答总秒数","qa_seconds",".1f")]
-    lines=["# LoCoMo 100题对比报告","",conclusion,"",
-           f"SimpleMem {stats['SimpleMem']['correct']}/100；MemNexus {stats['MemNexus']['correct']}/100。差值{paired['difference_pp']:+.1f}个百分点；对话聚类95%区间[{lo:.2f}, {hi:.2f}]。", "",
+    paper_lines=render_markdown(paper,SYSTEMS)
+    lines=["# LoCoMo 对比报告","",conclusion,""]
+    lines+=[*paper_lines,
+           f"本表为配对口径：仅计入两系统都完成的题（各 {len(paired_rows)//max(len(SYSTEMS),1)} 题）。"
+           f"两系统实际完成数不同时（崩溃或续跑），非配对的平均值会把不同题目集混在一起，不能用于比较。",""]
+    if paper_unpaired!=paper:
+        lines+=["<details><summary>非配对口径（含仅单侧完成的题，仅作覆盖参考）</summary>","",*render_markdown(paper_unpaired,SYSTEMS), "</details>",""]
+    lines+=["## 辅助诊断：LLM 裁判与配对检验","",
            "| 指标 | SimpleMem | MemNexus |","|---|---:|---:|"]
+    paired_correct={s:sum(1 for r in paired_rows if r["system"]==s and r["judge_result"]=="CORRECT") for s in SYSTEMS}
+    paired_n={s:sum(1 for r in paired_rows if r["system"]==s) for s in SYSTEMS}
+    lines.append(
+        f"| 裁判判对题数 | {paired_correct['SimpleMem']}/{paired_n['SimpleMem']} | "
+        f"{paired_correct['MemNexus']}/{paired_n['MemNexus']} |"
+    )
+    paired_diff=100*(paired_correct["MemNexus"]/max(paired_n["MemNexus"],1)
+                     -paired_correct["SimpleMem"]/max(paired_n["SimpleMem"],1))
+    lines.append(
+        f"| 裁判正确率差值 | — | {paired_diff:+.1f} 个百分点（配对子集）；全量对话聚类95%区间[{lo:.2f}, {hi:.2f}] |"
+    )
     html_rows=[]
     for title,field,fmt in labels:
         values=[format(stats[s][field],fmt) if stats[s][field] is not None else "N/A" for s in SYSTEMS]
         lines.append(f"| {title} | {values[0]} | {values[1]} |")
         html_rows.append(f"<tr><td>{html.escape(title)}</td><td>{values[0]}</td><td>{values[1]}</td></tr>")
     notes=[
-        f"实际配置：semantic_execution={report['signature']['settings']['semantic_execution']}；模型和裁判deepseek-v4-flash，温度0；相同Qwen query/document编码、1024维。",
+        f"实际配置：semantic_execution={report['signature']['settings']['semantic_execution']}；模型和裁判{report['signature']['settings'].get('model')}，温度0；相同Qwen query/document编码、1024维。",
         f"本轮全部尝试费用上界¥{checked['all_attempts_cost_upper_rmb']:.4f}；成功阶段含裁判¥{checked['effective_completed_cost_rmb']:.4f}；其中裁判¥{checked['judge_cost_rmb']:.4f}。",
         f"失败/废弃阶段额外上界¥{sum(x['cost_upper_rmb'] for x in checked['abandoned_attempts']):.4f}；未知usage预留上界¥{checked['unknown_usage_upper_rmb']:.4f}，预留不代表实际扣款。",
         "费用统一按输入¥2.4/百万、输出¥9.6/百万估算，未含本地硬件费用。",
@@ -290,15 +332,32 @@ def generate(folder):
     def cell(x):return str(x).replace("|","\\|").replace("\n","<br>")
     idx={(r["sample_id"],r["qa_index"],r["system"]):r for r in rows}
     details=[]
+    missing_pairs=0
     for q in report["cohort"]["questions"]:
-        a,b=(idx[q["sample_id"],q["qa_index"],s] for s in SYSTEMS)
+        got=[idx.get((q["sample_id"],q["qa_index"],s)) for s in SYSTEMS]
         ident=f"{q['sample_id']}/{q['qa_index']} · {LABELS[q['category_id']]}"
+        if any(g is None for g in got):
+            # A crashed or resumed run can leave a question unanswered by one or
+            # both systems.  Such rows are listed but never scored as paired.
+            missing_pairs+=1
+            text_row = next((g for g in got if g), None)
+            if text_row is None:
+                lines.append("| "+" | ".join(map(cell,[ident,"（未开始）","（未完成）","（未完成）",""]))+" |")
+                continue
+            present=[f"{s}: {g['judge_result']}" for s,g in zip(SYSTEMS,got) if g]
+            lines.append("| "+" | ".join(map(cell,[ident,
+                text_row["question"]+" / Gold: "+str(text_row["gold_answer"]),
+                "（未完成）","（未完成）","单侧未完成；"+"，".join(present)]))+" |")
+            continue
+        a,b=got
         lines.append("| "+" | ".join(map(cell,[ident,a["question"]+" / Gold: "+str(a["gold_answer"]),
              a["prediction"]+" / "+a["judge_result"],b["prediction"]+" / "+b["judge_result"],
              "SimpleMem: "+a["judge_reason"]+"; MemNexus: "+b["judge_reason"]]))+" |")
         details.append(f"<details><summary>{html.escape(ident)} — SimpleMem {a['judge_result']} / MemNexus {b['judge_result']}</summary>"
                        f"<p>{html.escape(a['question'])}</p><p>Gold: {html.escape(str(a['gold_answer']))}</p>"+
                        "".join(f"<h4>{s}</h4><pre>{html.escape(r['prediction'])}</pre><p>{html.escape(r['judge_reason'])}</p>" for s,r in zip(SYSTEMS,(a,b),strict=True))+"</details>")
+    if missing_pairs:
+        lines.insert(3,f"> 本报告为**部分完成**：{missing_pairs} 道题只有单侧结果，未计入配对指标。\n")
     (folder/"report.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
     document="""<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>100题对比报告</title>
 <style>body{font:16px/1.7 'Microsoft YaHei',sans-serif;max-width:1200px;margin:36px auto;padding:0 24px;color:#24313c;background:#f7fafc}table{border-collapse:collapse;width:100%;background:white}td,th{border-bottom:1px solid #ddd;padding:8px 16px;text-align:left}img{width:100%;height:auto}details{background:white;padding:12px;margin:10px 0}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}h1{font-size:28px}.notes{font-size:14px;color:#536271}</style>
@@ -308,7 +367,12 @@ def generate(folder):
         '<div class="notes">'+"".join(f"<p>{html.escape(note)}</p>" for note in notes)+"</div>"+\
         "<h2>逐题答案与裁判理由</h2>"+"".join(details)+"</html>"
     (folder/"report.html").write_text(document,encoding="utf-8")
-    report["status"]="completed"
+    if missing_pairs:
+        # Never mark a run "completed" when some question lacks a paired answer.
+        report["report_partial"]=True
+        report["unpaired_questions"]=missing_pairs
+    else:
+        report["status"]="completed"
     report["audit"]=checked
     save(folder/"run.json",report)
     print(f"报告与图表已生成：{folder/'report.html'}",flush=True)

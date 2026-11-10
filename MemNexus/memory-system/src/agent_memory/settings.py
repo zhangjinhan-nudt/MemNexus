@@ -26,6 +26,14 @@ def _positive_int(name: str, default: int) -> int:
     return value
 
 
+def _non_negative_int(name: str, default: int) -> int:
+    """允许 0 的整数配置：用于"关闭该通道"是合法取值的开关型上限。"""
+    value = int(os.getenv(name, str(default)))
+    if value < 0:
+        raise ValueError(f"{name} must be >= 0")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     db_path: Path = field(default_factory=lambda: Path(os.getenv("MEMORY_DB_PATH", "data/memory.sqlite3")))
@@ -61,6 +69,66 @@ class Settings:
     )
     open_domain_compat: bool = field(
         default_factory=lambda: os.getenv("MEMORY_OPEN_DOMAIN_COMPAT", "true").lower() in {"1", "true", "yes"}
+    )
+    # One-call query bridge: paraphrases the question into retrieval terms the
+    # original phrasing does not contain. Off by default so the baseline run
+    # never picks it up; A/B decides whether it earns its call.
+    llm_bridge_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_LLM_BRIDGE", "false").lower() in {"1", "true", "yes"}
+    )
+    llm_bridge_max_terms: int = field(
+        default_factory=lambda: _positive_int("MEMORY_LLM_BRIDGE_MAX_TERMS", 4)
+    )
+    # The typed negative gate may only declare "absent" when it has examined
+    # the whole memory store, not the retrieved subgraph. Off by default: the
+    # A/B measures the false-abstention rate before it can be trusted.
+    negative_gate_full_scan_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_GATE_FULL_SCAN", "false").lower() in {"1", "true", "yes"}
+    )
+    # Reader fallback: when the contract pipeline still abstains after bounded
+    # inference, one free-reading call proposes an answer whose supporting
+    # quote is verified verbatim against the cited sources. Off by default;
+    # A/B decides whether verified-quote reading earns its call.
+    llm_reader_fallback_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_LLM_READER_FALLBACK", "false").lower() in {"1", "true", "yes"}
+    )
+    # Reader hint: one free-reading call before synthesis whose verified
+    # proposal is offered to the contract synthesiser as a hint (append-only
+    # prompt enrichment; the contract still decides). Off by default.
+    llm_reader_hint_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_LLM_READER_HINT", "false").lower() in {"1", "true", "yes"}
+    )
+    # Measured on 42 paired questions: an unconstrained subject-keyed sweep
+    # added 8 unrelated facts about the same person and lowered three questions
+    # without fixing any. Default off until the sweep is predicate-constrained.
+    subject_recall_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_SUBJECT_RECALL", "false").lower() in {"1", "true", "yes"}
+    )
+    subject_recall_limit: int = field(
+        default_factory=lambda: _positive_int("MEMORY_SUBJECT_RECALL_LIMIT", 8)
+    )
+    # Indexed-sweep quota: caps how many ranked hits the indexed sweep may add
+    # per question. Measured on the 1000-question run: indexed_sweep items take
+    # 64.4% of retrieved characters with a 1.0% hit rate, while the offline
+    # replay shows cap=2 keeps R@10 (0.726->0.734) and cuts retrieval chars 49%.
+    # Default 32 = the behaviour of the frozen baseline run; A/B on the E4
+    # targeted cohort decides whether a smaller cap earns its keep end-to-end.
+    indexed_sweep_limit: int = field(
+        default_factory=lambda: _non_negative_int("MEMORY_INDEXED_SWEEP_LIMIT", 32)
+    )
+    bounded_inference_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_BOUNDED_INFERENCE", "false").lower() in {"1", "true", "yes"}
+    )
+    # Temporal rescue: when a date-seeking question still abstains on a
+    # non-adversarial route, deterministically extract the best-corroborated
+    # date span from the grounded evidence (subject overlap + proximity +
+    # occurred_at agreement; the quote is the verbatim event text). Zero model
+    # calls. Off by default; A/B decides.
+    temporal_rescue_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_TEMPORAL_RESCUE", "false").lower() in {"1", "true", "yes"}
+    )
+    answer_normalize_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_ANSWER_NORMALIZE", "true").lower() in {"1", "true", "yes"}
     )
     allow_assistant_evidence: bool = field(
         default_factory=lambda: os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
@@ -116,6 +184,7 @@ class Settings:
             "max_candidates",
             "grounding_max_raw_sources",
             "semantic_max_answer_calls",
+            "subject_recall_limit",
             "activation_ttl_seconds",
             "model_max_tokens",
             "inference_cache_max_entries",
@@ -135,8 +204,8 @@ class Settings:
             raise ValueError("inference_cache_ttl_seconds must be finite and positive")
         if self.deployment_mode not in {"local", "production"}:
             raise ValueError("MEMORY_DEPLOYMENT_MODE must be local or production")
-        if self.planner_mode not in {"model", "adaptive"}:
-            raise ValueError("MEMORY_PLANNER_MODE must be model or adaptive")
+        if self.planner_mode not in {"model", "adaptive", "rule"}:
+            raise ValueError("MEMORY_PLANNER_MODE must be model, adaptive or rule")
         if self.output_language not in {"en", "zh"}:
             raise ValueError("MEMORY_OUTPUT_LANGUAGE must be en or zh")
         if self.deployment_mode == "production" and len(self.api_key) < 32:

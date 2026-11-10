@@ -499,6 +499,85 @@ def indexed_memory_hits(
     return hits
 
 
+def _cosine(left: list[float], right: list[float]) -> float:
+    if not left or not right:
+        return 0.0
+    numerator = sum(a * b for a, b in zip(left, right, strict=True))
+    scale = math.sqrt(sum(a * a for a in left)) * math.sqrt(sum(b * b for b in right))
+    return numerator / scale if scale else 0.0
+
+
+def _memory_hit(memory: Memory, score: float, origin: str) -> Hit:
+    return Hit(
+        content=memory.content,
+        score=max(0.0, min(0.99, score)),
+        source_file=f"[memory:{memory.memory_id}]",
+        chunk_id=f"{memory.memory_id}:{memory.version}",
+        metadata={
+            "origin": origin,
+            "memory_id": memory.memory_id,
+            "version": memory.version,
+            "revision": memory.revision,
+            "subject": memory.subject,
+            "predicate": memory.predicate,
+            "value": memory.value,
+            "status": memory.status,
+            "assertion": memory.assertion,
+            "scope_type": memory.scope_type,
+            "scope_id": memory.scope_id,
+            "valid_from": memory.valid_from.isoformat() if memory.valid_from else None,
+            "valid_to": memory.valid_to.isoformat() if memory.valid_to else None,
+            "evidence": [item.model_dump(mode="json") for item in memory.evidence],
+        },
+    )
+
+
+async def subject_recall_hits(
+    query: str,
+    entities: list[str],
+    memories: list[Memory],
+    *,
+    exclude: set[str] | None = None,
+    embedder=None,
+    limit: int = 8,
+) -> list[Hit]:
+    """Recall facts about the question's own subjects when a required slot stayed uncovered.
+
+    Measured failure: ``What martial arts has John done?`` retrieved John's
+    taekwondo fact but not his kickboxing fact. Both memories have the same
+    subject; only the wording differs (query uses the hypernym, the fact the
+    hyponym). Topical ranking cannot bridge that gap, but the subject key can.
+    Every candidate is an already-authorised memory; only ordering is new, and
+    the returned hits still pass through grounding's source checks.
+    """
+    keys = [entity.strip() for entity in entities if entity and entity.strip()]
+    if not keys or limit <= 0:
+        return []
+    excluded = exclude or set()
+    related = []
+    for memory in memories:
+        if memory.memory_id in excluded:
+            continue
+        subject = (memory.subject or "").casefold()
+        if not any(
+            re.search(r"(?<!\w)" + re.escape(key.casefold()) + r"(?!\w)", subject) for key in keys
+        ):
+            continue
+        related.append(memory)
+    if not related:
+        return []
+    texts = [f"{m.subject} {m.predicate} {m.value} {m.content}" for m in related]
+    if embedder is not None:
+        query_vectors = await embedder.encode_query([query])
+        document_vectors = await embedder.encode_documents(texts)
+        scores = [_cosine(query_vectors[0], vector) for vector in document_vectors]
+    else:
+        wanted = _retrieval_terms(query)
+        scores = [len(wanted & _retrieval_terms(text)) / max(1, len(wanted)) for text in texts]
+    order = sorted(range(len(related)), key=lambda i: (-scores[i], related[i].memory_id))[:limit]
+    return [_memory_hit(related[i], scores[i], "subject_sweep") for i in order]
+
+
 def _retrieval_terms(text: str) -> set[str]:
     result = set()
     for token in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", text.casefold()):
@@ -523,7 +602,39 @@ def _retrieval_pairs(text: str) -> set[tuple[str, str]]:
     return set(pairwise(tokens))
 
 
-def typed_negative_gate(query: str, route: QuestionRoute, graph: EventGraph) -> NegativeGate:
+def _typed_constraints_ok(
+    text: str,
+    subject: str | None,
+    occurred_at,
+    target_entities: set[str],
+    type_requirements: list[str],
+    years: list[str],
+    months: list[str],
+) -> bool:
+    """Does one piece of evidence satisfy every typed constraint of the question?"""
+    text = text.casefold()
+    subject_ok = not target_entities or any(
+        entity in text or (subject and entity == subject.casefold()) for entity in target_entities
+    )
+    type_ok = all(
+        any(term in text for term in TYPE_TERMS.get(type_name, {type_name}))
+        for type_name in type_requirements
+    )
+    year_ok = not years or any(
+        year in text or (occurred_at and year in str(occurred_at)) for year in years
+    )
+    month_ok = not months or any(
+        month in text or (occurred_at and _month_name(occurred_at) == month) for month in months
+    )
+    return subject_ok and type_ok and year_ok and month_ok
+
+
+def typed_negative_gate(
+    query: str,
+    route: QuestionRoute,
+    graph: EventGraph,
+    memories=None,
+) -> NegativeGate:
     if not route.negative_gate:
         return NegativeGate(False, "not_an_adversarial_question")
     target_entities = {item.casefold() for item in route.entities}
@@ -534,28 +645,33 @@ def typed_negative_gate(query: str, route: QuestionRoute, graph: EventGraph) -> 
     months = [item.split("=", 1)[1] for item in route.constraints if item.startswith("month=")]
     supported: list[str] = []
     for index, node in enumerate(graph.nodes, 1):
-        text = node.text.casefold()
-        subject_ok = not target_entities or any(
-            entity in text or (node.subject and entity == node.subject.casefold())
-            for entity in target_entities
-        )
-        type_ok = all(
-            any(term in text for term in TYPE_TERMS.get(type_name, {type_name}))
-            for type_name in type_requirements
-        )
-        year_ok = not years or any(
-            year in text or (node.occurred_at and year in str(node.occurred_at)) for year in years
-        )
-        month_ok = not months or any(
-            month in text or (node.occurred_at and _month_name(node.occurred_at) == month) for month in months
-        )
-        if subject_ok and type_ok and year_ok and month_ok:
+        if _typed_constraints_ok(
+            node.text, node.subject, node.occurred_at,
+            target_entities, type_requirements, years, months,
+        ):
             supported.append(str(index))
     if supported:
         return NegativeGate(False, "typed_evidence_supported", supported_source_ids=tuple(supported))
     constraints = ", ".join(route.constraints) or "no typed candidate"
-    # An incomplete retrieved graph cannot establish absence in the conversation.
-    return NegativeGate(False, f"not_found_in_examined_evidence; subject/type/time: {constraints}")
+    if memories is None:
+        # An incomplete retrieved graph cannot establish absence in the conversation.
+        return NegativeGate(False, f"not_found_in_examined_evidence; subject/type/time: {constraints}")
+    # Whole-store evidence was supplied: absence is now decidable, and this is
+    # the only condition under which the gate is allowed to block.
+    for memory in memories:
+        if _typed_constraints_ok(
+            memory.content, memory.subject, memory.valid_from,
+            target_entities, type_requirements, years, months,
+        ):
+            return NegativeGate(
+                False,
+                "typed_evidence_supported_full_scan",
+                supported_source_ids=(str(memory.memory_id),),
+            )
+    return NegativeGate(
+        True,
+        f"absent_from_full_memory_store; subject/type/time: {constraints}",
+    )
 
 
 def _clean(value: Any) -> str | None:

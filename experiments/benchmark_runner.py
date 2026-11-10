@@ -42,8 +42,8 @@ class PreflightError(RuntimeError):
 
 @dataclass(frozen=True)
 class LockedProtocol:
-    main_model: str = "deepseek-v4-flash"
-    judge_model: str = "deepseek-v4-flash"
+    main_model: str = "deepseek-v4.1-flash"
+    judge_model: str = "deepseek-v4.1-flash"
     temperature: float = 0.0
     embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_dimension: int = 1024

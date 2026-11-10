@@ -19,6 +19,7 @@ from .grounding import (
     collect_raw_records,
     gap_queries,
     ground_evidence,
+    missing_required_info,
     record_key,
     reread_evidence,
     retrieve_gaps,
@@ -43,7 +44,13 @@ from .models import (
 from .planning import BeliefState
 from .ports import ConflictError, ModelNotConfigured, NotFoundError
 from .providers import ModelOutputError, answer_call_budget, build_model
-from .reasoning import EventGraph, classify_question, indexed_memory_hits, typed_negative_gate
+from .reasoning import (
+    EventGraph,
+    classify_question,
+    indexed_memory_hits,
+    subject_recall_hits,
+    typed_negative_gate,
+)
 from .retrieval import Retriever, _cosine, estimate_tokens
 from .retrieval_projection import RetrievalProjection
 from .settings import Settings
@@ -66,6 +73,37 @@ def _reasoning_query(query: str) -> str:
     return _EVAL_DATE_SUFFIX.sub("", query).strip()
 from .short_term import ShortTermMemory
 from .store import SQLiteStore
+
+_ABSTENTION = re.compile(
+    r"not mentioned|insufficient evidence|no information|cannot (?:be )?determin|unable to (?:determine|answer)",
+    re.IGNORECASE,
+)
+
+
+def _is_abstention(text: str) -> bool:
+    """Whether a rendered answer declines to answer rather than answering."""
+    return bool(_ABSTENTION.search(text or ""))
+
+
+def _subject_present(entities, sources) -> bool:
+    """Whether the question's own subject appears anywhere in the evidence.
+
+    This is the gate that separates "the memory is there but the relation is not"
+    (a bounded inference may help) from "the conversation never mentions this
+    person/event" (an inference would be fabrication).
+    """
+    keys = [entity.casefold() for entity in entities or [] if entity]
+    if not keys:
+        return False
+    for hit in sources:
+        text = " ".join([
+            str(hit.metadata.get("subject") or ""),
+            hit.content,
+            *(str(event.get("text") or "") for event in hit.metadata.get("source_events", [])),
+        ]).casefold()
+        if any(re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", text) for key in keys):
+            return True
+    return False
 
 
 def _answer_contract(plan) -> str:
@@ -695,8 +733,33 @@ class MemoryRuntime:
                     if self.retriever._eligible(memory, session, lifecycle_plan, utcnow())
                 ]
                 indexed = ([] if collection_query is not None and not synthesis else
-                           indexed_memory_hits(query, reasoning_route, eligible, retrieved.results))
-                grounding_hits = [*retrieved.results, *indexed, *collection_sources]
+                           indexed_memory_hits(query, reasoning_route, eligible, retrieved.results,
+                                               limit=self.settings.indexed_sweep_limit))
+                subject_extra: list = []
+                subject_must: set[str] = set()
+                if (
+                    self.settings.subject_recall_enabled
+                    and retrieved.plan.query_entities
+                    and missing_required_info(
+                        [*retrieved.results, *indexed, *collection_sources],
+                        retrieved.plan.required_info,
+                    )
+                ):
+                    already = {
+                        str(hit.metadata.get("memory_id"))
+                        for hit in [*retrieved.results, *indexed, *collection_sources]
+                        if hit.metadata.get("memory_id")
+                    }
+                    subject_extra = await subject_recall_hits(
+                        query,
+                        list(retrieved.plan.query_entities),
+                        eligible,
+                        exclude=already,
+                        embedder=self.retriever.embedder,
+                        limit=self.settings.subject_recall_limit,
+                    )
+                    subject_must = {str(hit.metadata.get("memory_id")) for hit in subject_extra}
+                grounding_hits = [*retrieved.results, *indexed, *collection_sources, *subject_extra]
                 references = [
                     e["turn_id"]
                     for hit in grounding_hits
@@ -731,6 +794,7 @@ class MemoryRuntime:
                         * (4 if synthesis or reasoning_route.recall_policy == "recall_first" else 2),
                     ),
                     "candidate_limit": self.settings.max_candidates,
+                    "must_include": subject_must,
                 }
                 grounded = await asyncio.to_thread(
                     ground_evidence, query, retrieved.plan, grounding_hits, **ground_options
@@ -817,7 +881,12 @@ class MemoryRuntime:
                     sources=[hit.model_dump(mode="json") for hit in retrieved.results],
                 )
             event_graph = EventGraph.from_hits(retrieved.results) if not semantic and (synthesis or collection_query is None) else EventGraph()
-            negative_gate = typed_negative_gate(query, reasoning_route, event_graph)
+            gate_memories = None
+            if self.settings.negative_gate_full_scan_enabled:
+                # Only whole-store evidence can prove absence; the retrieved
+                # subgraph is a sample, not a proof. One SQLite scan, no model.
+                gate_memories = await asyncio.to_thread(self.store.memories, scope)
+            negative_gate = typed_negative_gate(query, reasoning_route, event_graph, gate_memories)
             reasoning_context = event_graph.prompt_context(query, reasoning_route)
             reasoning_trace = {
                 "question_type": retrieved.plan.query_type if collection_query else reasoning_route.kind,
@@ -933,15 +1002,21 @@ class MemoryRuntime:
                     execution = None
                     try:
                         answer_table = await self.model.synthesize(query, retrieved.plan, retrieved.results)
-                        generated = render_table(answer_table)
+                        generated = render_table(answer_table, retrieved.results)
                         reasoning_trace.update(answer_path="semantic_binding_fallback_synthesis",
                                                semantic_error=semantic_error,
                                                answer_table=answer_table.model_dump(mode="json"))
                         semantic = False
                     except Exception as fallback_error:
+                        # Both the typed binding and the synthesis fallback raised.
+                        # The text below is emitted by this handler, not decided by
+                        # the system, so the row must be flagged: protocol R2 reads
+                        # forced_abstain first and discards the accuracy of any run
+                        # that contains one.
                         semantic_error += " | fallback=" + str(fallback_error)
                         generated = "Insufficient evidence to determine the answer."
-                        reasoning_trace.update(answer_path="semantic_binding_failed", semantic_error=semantic_error)
+                        reasoning_trace.update(answer_path="semantic_binding_failed", semantic_error=semantic_error,
+                                               forced_abstain=True)
                 initial_execution = execution.model_dump(mode="json") if execution else None
                 acquisition = {"stop_reason": "ready" if execution is not None and not execution.gaps else "disabled", "queries": []}
                 gap_action, retrieval_gaps = follow_up_gaps(execution) if execution is not None else ("ready", [])
@@ -981,7 +1056,8 @@ class MemoryRuntime:
                             semantic_scores=gap_vectors,
                             candidate_hits=[*grounding_hits, *indexed_memory_hits(
                                 query, reasoning_route,
-                                eligible, retrieved.results, limit=32)],
+                                eligible, retrieved.results,
+                                limit=self.settings.indexed_sweep_limit)],
                             resolved_turns=resolved,
                         )
                     if new_sources and (allowance is None or allowance["normal_calls"] < allowance["max_calls"]):
@@ -1038,11 +1114,29 @@ class MemoryRuntime:
                 from .synthesis import render_table
                 self.call_metrics.record("answer")
                 try:
-                    answer_table = await self.model.synthesize(query, retrieved.plan, retrieved.results)
+                    reader_hints = None
+                    if (
+                        self.settings.llm_reader_hint_enabled
+                        and not reasoning_route.negative_gate
+                        and retrieved.results
+                    ):
+                        # Reader hint: a verified-quote free reading offered to
+                        # the contract synthesiser. Append-only: the contract
+                        # still validates every value it accepts.
+                        self.call_metrics.record("answer")
+                        from .llm_reader import read_answer
+                        reading = await read_answer(self.model, query, retrieved.results)
+                        if reading is not None:
+                            reader_hints = [reading]
+                            retrieved.warnings.append("reader_hint")
+                            reasoning_trace["reader_hint"] = reading["answer"][:120]
+                    answer_table = await self.model.synthesize(
+                        query, retrieved.plan, retrieved.results, hints=reader_hints
+                    )
                 except Exception:
                     self.call_metrics.record_error()
                     raise
-                generated = render_table(answer_table)
+                generated = render_table(answer_table, retrieved.results)
                 reasoning_trace["answer_table"] = answer_table.model_dump(mode="json")
                 reasoning_trace["answer_path"] = "source_bound_synthesis"
                 cache_status = "disabled"
@@ -1088,8 +1182,90 @@ class MemoryRuntime:
                 )
                 generated = inference.text
                 generation_ms = (time.perf_counter() - generation_started) * 1000
+            if negative_gate.blocked and self.settings.negative_gate_full_scan_enabled:
+                # Whole-store scan proved no authorised evidence: the rule's
+                # verdict overrides the model, instead of merely nudging it.
+                generated = "Not mentioned in the conversation."
+                warnings.append("typed_negative_gate_hard_abstain")
             if collection_ir is not None:
                 reasoning_trace["answer_ir"] = collection_ir.model_dump(mode="json")
+            if (
+                self.settings.bounded_inference_enabled
+                and generated
+                and _is_abstention(generated)
+                and not reasoning_route.negative_gate
+                and hasattr(self.model, "infer_bounded")
+                and _subject_present(retrieved.plan.query_entities, retrieved.results)
+            ):
+                # Deterministic gate: the answer is empty, the question is not an
+                # adversarial one, and the queried subject is actually in the
+                # evidence. Only then may the model state one labelled inference.
+                self.call_metrics.record("answer")
+                try:
+                    inferred = await self.model.infer_bounded(query, retrieved.results)
+                except Exception as error:
+                    self.call_metrics.record_error()
+                    reasoning_trace["bounded_inference"] = {"error": str(error)}
+                else:
+                    reasoning_trace["bounded_inference"] = inferred.model_dump(mode="json")
+                    if not inferred.abstain and inferred.answer.strip():
+                        generated = inferred.answer.strip()
+                        reasoning_trace["answer_path"] = (
+                            str(reasoning_trace.get("answer_path") or "unknown") + "+bounded_inference"
+                        )
+            if (
+                self.settings.llm_reader_fallback_enabled
+                and generated
+                and _is_abstention(generated)
+                and not reasoning_route.negative_gate
+                and retrieved.results
+                and hasattr(self.model, "answer")
+            ):
+                # Last resort before abstaining: one free reading over the same
+                # grounded evidence.  The quote must verify verbatim against a
+                # cited source, so the answer cannot contain anything the
+                # evidence does not literally contain.
+                self.call_metrics.record("answer")
+                from .llm_reader import read_answer
+                reading = await read_answer(self.model, query, retrieved.results)
+                if reading is not None:
+                    generated = reading["answer"]
+                    retrieved.warnings.append("reader_fallback")
+                    reasoning_trace["reader_fallback"] = reading["answer"][:120]
+                    reasoning_trace["answer_path"] = (
+                        str(reasoning_trace.get("answer_path") or "unknown") + "+reader_fallback"
+                    )
+            if self.settings.temporal_rescue_enabled and _is_abstention(generated):
+                # Deterministic rescue for date-seeking questions: no model
+                # call.  On a non-adversarial route an abstention scores F1=0,
+                # so a quote-grounded date span is weakly dominant.  Never
+                # fires on the negative-gate route, so correct abstentions on
+                # adversarial questions are never overwritten.
+                if (
+                    not reasoning_route.negative_gate
+                    and retrieved.results
+                    and is_date_question(query)
+                ):
+                    from .temporal_rescue import rescue_temporal
+                    rescued = rescue_temporal(query, retrieved.results)
+                    if rescued is not None:
+                        generated = rescued["answer"]
+                        retrieved.warnings.append("temporal_rescue")
+                        reasoning_trace["temporal_rescue"] = {
+                            "answer": rescued["answer"],
+                            "quote": rescued["quote"][:200],
+                            "source_ids": rescued["source_ids"],
+                        }
+                        reasoning_trace["answer_path"] = (
+                            str(reasoning_trace.get("answer_path") or "unknown") + "+temporal_rescue"
+                        )
+            if self.settings.answer_normalize_enabled and generated:
+                # Surface canonicalisation only. The abstracted memory path drops
+                # the literal form ("yesterday", "2023-01-29", "at least 3");
+                # restating the same fact in the common written form restores the
+                # anchor without adding or changing any fact.
+                from .synthesis import normalize_answer_text
+                generated = normalize_answer_text(generated, query)
             # A deletion/correction while inference was running must not publish
             # or retain an answer assembled from a revoked snapshot, even when
             # acceleration is disabled or the request bypassed a full cache.

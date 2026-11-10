@@ -27,15 +27,18 @@ import httpx
 import numpy as np
 from dateutil import parser as date_parser
 
+from paper_protocol import JUDGE_INSTRUCTION, paper_table
+
 ROOT = Path(__file__).resolve().parents[1]
 SIMPLEMEM = ROOT / "SimpleMem"
 MEMNEXUS = ROOT / "MemNexus" / "memory-system"
 DATASET = ROOT / "benchmark-data" / "official" / "locomo" / "locomo10.json"
+# Official LoCoMo categories; the evaluator keys on these ids.
 CATEGORY_NAMES = {
-    1: "single-hop",
+    1: "multi-hop",
     2: "temporal",
-    3: "multi-hop",
-    4: "open-domain",
+    3: "open-domain",
+    4: "single-hop",
     5: "adversarial",
 }
 INPUT_PRICE = 2.4
@@ -94,6 +97,50 @@ class RemoteQwenEmbedding:
 
     def encode_single(self, text, is_query=False):
         return self._encode([text], "query" if is_query else "document")[0]
+
+
+# Answers that a provider error produced rather than the system deciding.
+# Protocol R2: read forced_abstain before accuracy. A legitimate abstention
+# ("Not mentioned in the conversation.") is a decision and must NOT be flagged,
+# because on adversarial questions it is the correct answer.
+FORCED_ABSTAIN_MARKERS = {"failed to generate answer"}
+
+
+def is_forced_abstain(prediction: str) -> bool:
+    text = (prediction or "").strip()
+    return not text or text.casefold() in FORCED_ABSTAIN_MARKERS
+
+
+# Transient provider/network failures: worth retrying at both the question
+# level (3 attempts with backoff) and, if they persist, the unit level.
+TRANSIENT_ERROR_NAMES = {
+    "ReadError", "ConnectError", "ReadTimeout", "ConnectTimeout",
+    "APIConnectionError", "APITimeoutError",
+}
+
+
+def is_transient_error(exc: BaseException) -> bool:
+    """网络/限流类瞬时错误：重试有意义。与确定性校验错误（ValueError 族）
+    相对——后者在 temp=0 下重试必然复现，必须降级而非重试。"""
+    status = getattr(exc, "status_code", None)
+    return (
+        status == 429
+        or isinstance(status, int) and status >= 500
+        or isinstance(exc, (TimeoutError, ConnectionError))
+        or type(exc).__name__ in TRANSIENT_ERROR_NAMES
+    )
+
+
+def is_deterministic_output_error(exc: BaseException | None) -> bool:
+    """确定性输出校验错误：降级为该题拒答行，而非杀死整单元。
+
+    判据：ValueError 族（ModelOutputError 是其子类，synthesis 的日期/引用
+    校验也抛 ValueError）且非网络瞬时错误。temp=0 下同一证据集重试必然
+    复现同一拒绝——实测 conv-44 连续 6 轮单元重试全败于同一道题。
+    预算类（BudgetExceededError 继承 BaseException）与未知异常不在此列，
+    仍走 raise，由人工或单元级重试处理。
+    """
+    return isinstance(exc, ValueError) and not is_transient_error(exc)
 
 
 def usage_delta(after: dict, before: dict) -> dict:
@@ -201,6 +248,44 @@ def checkpoint(ledger, suffix, value, *, append=False):
         handle.write(json.dumps(value, ensure_ascii=False) + "\n")
 
 
+def checkpoint_row_key(row: dict) -> tuple[str, str, str, str, str]:
+    """Stable question identity; text alone is not unique in LoCoMo."""
+    return (
+        str(row.get("sample_id", "")),
+        str(row.get("qa_index", "")),
+        str(row.get("question", "")),
+        str(row.get("evaluation_query", "")),
+        str(row.get("gold_answer", "")),
+    )
+
+
+def valid_checkpoint_row(row: dict) -> bool:
+    prediction = str(row.get("prediction") or "").strip()
+    return bool(prediction and prediction != "Failed to generate answer" and not row.get("error"))
+
+
+def load_resumable_rows(usage_ledger: Path | None, sample_id: str) -> dict[tuple[str, str, str, str, str], dict]:
+    """Read valid rows only; failed/empty attempts remain in the audit log."""
+    if usage_ledger is None:
+        return {}
+    path = usage_ledger.with_suffix(".rows.jsonl")
+    if not path.exists():
+        return {}
+    completed = {}
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise RuntimeError(f"Malformed checkpoint {path}:{line_number}") from error
+            key = checkpoint_row_key(row)
+            if key[0] == str(sample_id) and valid_checkpoint_row(row):
+                completed[key] = row
+    return completed
+
+
 def run_simplemem(
     sample: dict,
     questions: list[dict],
@@ -208,6 +293,7 @@ def run_simplemem(
     *,
     usage_ledger: Path | None = None,
     max_session: int | None = None,
+    resume: bool = False,
 ) -> tuple[dict, list[dict]]:
     os.environ["EXPERIMENT_COMPONENT_BUDGET_RMB"] = str(component_budget)
     os.environ["EXPERIMENT_USAGE_LEDGER_PATH"] = str(
@@ -265,9 +351,17 @@ def run_simplemem(
                 "build_usage": build_usage,
             },
         )
+        completed = load_resumable_rows(usage_ledger, str(sample.get("sample_id", "0"))) if resume else {}
         rows = []
         for qa in questions:
             query, gold = evaluation_query(qa)
+            key = checkpoint_row_key({
+                "sample_id": sample.get("sample_id", "0"), "qa_index": qa["qa_index"],
+                "question": qa["question"], "evaluation_query": query, "gold_answer": gold,
+            })
+            if key in completed:
+                rows.append(completed[key])
+                continue
             before = dict(system.llm_client.usage)
             started = time.perf_counter()
             contexts = system.hybrid_retriever.retrieve(
@@ -281,12 +375,14 @@ def run_simplemem(
                 {
                     "system": "SimpleMem",
                     "sample_id": sample.get("sample_id", "0"),
+                    "qa_index": qa["qa_index"],
                     "category": CATEGORY_NAMES[qa["category"]],
                     "category_id": qa["category"],
                     "question": qa["question"],
                     "evaluation_query": query,
                     "gold_answer": gold,
                     "prediction": prediction,
+                    "forced_abstain": is_forced_abstain(prediction),
                     "retrieved_sources": [
                         entry.lossless_restatement for entry in contexts
                     ],
@@ -330,6 +426,44 @@ def parse_occurred_at(value: str):
     return parsed.astimezone(UTC)
 
 
+async def build_memory_base(
+    runtime, scope, session, turns: list[dict], longmemeval: bool
+) -> int:
+    """Ingest every turn and drain extraction. Returns the batch count."""
+    from agent_memory.models import Event, TurnInput
+
+    batches = 0
+    for index, turn in enumerate(turns, 1):
+        content = turn["text"] if longmemeval else f"{turn['speaker']}: {turn['text']}"
+        chunks = [content]
+        for part, chunk in enumerate(chunks):
+            result = await runtime.append_turn(
+                scope,
+                session.session_id,
+                TurnInput(
+                    request_id=f"dialogue-{index}-{part}",
+                    events=[
+                        Event(
+                            role=("assistant" if longmemeval and turn["speaker"] == "assistant" else "user"),
+                            speaker=turn["speaker"],
+                            content=chunk,
+                            occurred_at=parse_occurred_at(turn["date_time"]),
+                        )
+                    ],
+                ),
+            )
+            if result["extraction_due"]:
+                extracted = await runtime.extract(scope, session.session_id)
+                if extracted["status"] != "idle":
+                    batches += 1
+    while True:
+        extracted = await runtime.extract(scope, session.session_id)
+        if extracted["status"] == "idle":
+            break
+        batches += 1
+    return batches
+
+
 async def run_memnexus(
     sample: dict,
     questions: list[dict],
@@ -337,6 +471,11 @@ async def run_memnexus(
     *,
     usage_ledger: Path | None = None,
     max_session: int | None = None,
+    snapshot_dir: Path | None = None,
+    require_snapshot: bool = False,
+    resilient: bool = False,
+    answer_timeout: float = 180.0,
+    resume: bool = False,
 ):
     os.environ["EXPERIMENT_COMPONENT_BUDGET_RMB"] = str(component_budget)
     os.environ["EXPERIMENT_USAGE_LEDGER_PATH"] = str(
@@ -344,7 +483,9 @@ async def run_memnexus(
     )
     os.environ["MEMORY_EXPERIMENT_DROP_QUESTION_CANDIDATES"] = "1"
     sys.path.insert(0, str(MEMNEXUS / "src"))
-    from agent_memory.models import Event, Scope, TurnInput
+    from agent_memory import snapshot as memory_snapshot
+    from agent_memory.models import Scope
+    from agent_memory.providers import BudgetExceededError as MemNexusBudgetExceededError
     from agent_memory.runtime import MemoryRuntime
     from agent_memory.settings import Settings
 
@@ -354,18 +495,43 @@ async def run_memnexus(
     if sample.get("expected_raw_turns") is not None and len(turns) != sample["expected_raw_turns"]:
         raise ValueError("Raw conversation coverage mismatch before any provider request")
     longmemeval = sample.get("dataset") == "LongMemEval-S"
+    sample_id = str(sample.get("sample_id", "sample-0"))
     async with AsyncExitStack() as resources:
-        folder = resources.enter_context(
-            tempfile.TemporaryDirectory(prefix="memnexus-locomo-pilot-")
+        # A missing snapshot previously meant that every provider failure threw
+        # away the partially built SQLite base together with its temporary
+        # directory.  Keep only that build in the unit directory so a retry can
+        # resume through the existing request_id idempotency contract.  Frozen
+        # snapshots still use an isolated temporary replay database.
+        persistent_build = bool(
+            resume and usage_ledger is not None and snapshot_dir is not None
+            and not memory_snapshot.available(snapshot_dir, sample_id)
         )
+        if persistent_build:
+            database = usage_ledger.with_suffix(".work.sqlite3")
+        else:
+            folder = resources.enter_context(
+                tempfile.TemporaryDirectory(prefix="memnexus-locomo-pilot-")
+            )
+            database = Path(folder) / "memory.sqlite3"
+        # Replay happens before the runtime opens the file, so the runtime does
+        # no ingestion at all and QA sees exactly the frozen memory set.
+        replayed = None
+        if snapshot_dir is not None:
+            if memory_snapshot.available(snapshot_dir, sample_id):
+                replayed = memory_snapshot.thaw(snapshot_dir, sample_id, database)
+            elif require_snapshot:
+                raise RuntimeError(
+                    f"No memory snapshot for {sample_id!r} in {snapshot_dir} "
+                    "and --require-snapshots forbids rebuilding it"
+                )
         runtime = MemoryRuntime.from_settings(
             Settings(
-                db_path=Path(folder) / "memory.sqlite3",
+                db_path=database,
                 pending_turns=5,
                 context_turns=int(os.getenv("MEMORY_CONTEXT_TURNS", "15")),
                 model_timeout=180,
                 model_max_tokens=int(os.getenv("EXPERIMENT_MEMNEXUS_MAX_TOKENS", "4096")),
-                planner_mode="model",
+                planner_mode=os.getenv("MEMORY_PLANNER_MODE", "model"),
                 acceleration_enabled=False,
                 output_language="en",
                 evidence_grounding_enabled=True,
@@ -376,46 +542,59 @@ async def run_memnexus(
         resources.push_async_callback(runtime.close)
         if runtime.model is None or runtime.retriever.embedder is None:
             raise RuntimeError("MemNexus model or Qwen embedding is not configured")
-        scope = Scope(
-            tenant_id="locomo-pilot", owner_id=str(sample.get("sample_id", "sample-0"))
-        )
-        session = runtime.store.create_session(scope, "LoCoMo official pilot")
+        scope = Scope(tenant_id="locomo-pilot", owner_id=sample_id)
         build_before = dict(runtime.model.usage)
         started = time.perf_counter()
-        extraction_batches = 0
-        for index, turn in enumerate(turns, 1):
-            content = turn["text"] if longmemeval else f"{turn['speaker']}: {turn['text']}"
-            chunks = [content]
-            for part, chunk in enumerate(chunks):
-                result = await runtime.append_turn(
-                    scope,
-                    session.session_id,
-                    TurnInput(
-                        request_id=f"dialogue-{index}-{part}",
-                        events=[
-                            Event(
-                                role=("assistant" if longmemeval and turn["speaker"] == "assistant" else "user"),
-                                speaker=turn["speaker"],
-                                content=chunk,
-                                occurred_at=parse_occurred_at(turn["date_time"]),
-                            )
-                        ],
-                    ),
-                )
-                if result["extraction_due"]:
-                    extracted = await runtime.extract(scope, session.session_id)
-                    if extracted["status"] != "idle":
-                        extraction_batches += 1
-        while True:
-            extracted = await runtime.extract(scope, session.session_id)
-            if extracted["status"] == "idle":
-                break
-            extraction_batches += 1
-        build_ms = (time.perf_counter() - started) * 1000
+        sessions = runtime.store.sessions(scope)
+        if replayed is not None:
+            if not sessions:
+                raise RuntimeError(f"Snapshot for {sample_id!r} contains no session")
+            session = sessions[0]
+            extraction_batches = int(replayed.get("extraction_batches", 0))
+            build_ms = 0.0
+        else:
+            if persistent_build and sessions:
+                if len(sessions) != 1:
+                    raise RuntimeError(
+                        f"Resumable build for {sample_id!r} has {len(sessions)} sessions"
+                    )
+                session = sessions[0]
+            else:
+                session = runtime.store.create_session(scope, "LoCoMo official pilot")
+            processed_before = session.processed_sequence
+            extraction_batches = await build_memory_base(
+                runtime, scope, session, turns, longmemeval
+            )
+            # build_memory_base counts calls made by this process.  Include the
+            # already committed five-turn batches for snapshot provenance.
+            extraction_batches += processed_before // 5
+            build_ms = (time.perf_counter() - started) * 1000
         memories = runtime.store.memories(scope)
         if not memories:
             raise RuntimeError("MemNexus memory build produced zero memories")
-        build_usage = usage_delta(runtime.model.usage, build_before)
+        # A replay must report no build spend; anything else would silently
+        # double-count money that was paid on the run that froze the base.
+        build_usage = (
+            usage_delta(runtime.model.usage, runtime.model.usage)
+            if replayed is not None
+            else usage_delta(runtime.model.usage, build_before)
+        )
+        if snapshot_dir is not None and replayed is None:
+            # Freeze only after the base is proven non-empty: an empty snapshot
+            # would replay as a permanently, silently broken condition.
+            replayed = memory_snapshot.freeze(
+                runtime.store,
+                snapshot_dir,
+                sample_id,
+                metadata={
+                    "system": "MemNexus",
+                    "model": os.getenv("MEMORY_MODEL_NAME", ""),
+                    "raw_turns": len(turns),
+                    "memory_count": len(memories),
+                    "extraction_batches": extraction_batches,
+                    "build_usage": build_usage,
+                },
+            )
         checkpoint(
             usage_ledger,
             ".memory.json",
@@ -429,29 +608,103 @@ async def run_memnexus(
                 "build_usage": build_usage,
             },
         )
+        completed = load_resumable_rows(usage_ledger, sample_id) if resume else {}
         rows = []
         for qa in questions:
             query, gold = evaluation_query(qa)
+            key = checkpoint_row_key({
+                "sample_id": sample_id, "qa_index": qa["qa_index"],
+                "question": qa["question"], "evaluation_query": query, "gold_answer": gold,
+            })
+            if key in completed:
+                rows.append(completed[key])
+                continue
             before = dict(runtime.model.usage)
-            answer = await runtime.answer(
-                scope,
-                session.session_id,
-                query,
-                top_k=20,
-                timeout=180,
-                accelerate=False,
-                prepare=False,
-            )
+            answer, error = None, None
+            for attempt in range(3):
+                try:
+                    answer = await runtime.answer(
+                        scope,
+                        session.session_id,
+                        query,
+                        top_k=20,
+                        timeout=answer_timeout,
+                        accelerate=False,
+                        prepare=False,
+                    )
+                    break
+                except (Exception, MemNexusBudgetExceededError) as caught:
+                    error = caught
+                    if not resilient:
+                        raise
+                    if not is_transient_error(caught) or attempt == 2:
+                        break
+                    await asyncio.sleep((3, 12, 30)[attempt])
+            if answer is None and resume:
+                # 2026-11-10 修复：确定性输出校验错误（synthesis/providers 的
+                # ValueError 族，如日期端点校验、证据引用校验）在 temp=0 下
+                # 重试必然复现；此前无条件 raise 会把该对话已答对的题全部丢弃
+                # （实测 conv-44 连丢 79 题、6 轮单元重试全败于同一道题）。
+                # 现在此类错误降级为该题的拒答行（非空 prediction +
+                # error 审计字段），单元继续作答其余题；
+                # transient 网络错误与预算/未知错误仍走 raise，由单元级重试兜底。
+                if not is_deterministic_output_error(error):
+                    raise RuntimeError(
+                        f"MemNexus answer failed for {sample_id}: {type(error).__name__}: {error}"
+                    ) from error
+            if answer is None:
+                rows.append({
+                    "system": "MemNexus",
+                    "sample_id": sample.get("sample_id", "0"),
+                    "qa_index": qa["qa_index"],
+                    "category": CATEGORY_NAMES[qa["category"]],
+                    "category_id": qa["category"],
+                    "question": qa["question"],
+                    "evaluation_query": query,
+                    "gold_answer": gold,
+                    # 降级拒答措辞必须非空：跑批器把空预测判为单元失败
+                    # （"empty predictions are not a completed unit"），
+                    # 那正是本次修复要消除的传染路径。非对抗题上该行 F1≈0，
+                    # 只丢这一题的分；对抗题上会计为 AdvSR 成功，分析时用
+                    # answer_error 字段区分真实拒答与降级拒答。
+                    "prediction": "Not mentioned in the conversation",
+                    # The answer request raised and no text was produced at all:
+                    # this is the forced-abstain case the gate exists to catch.
+                    "forced_abstain": True,
+                    "retrieved_sources": [],
+                    "retrieval_count": 0,
+                    "model_calls": usage_delta(runtime.model.usage, before),
+                    "runtime_model_calls": {},
+                    "grounding": {},
+                    "reasoning": {"answer_path": "failed"},
+                    "retrieval_ms": 0,
+                    "generation_ms": 0,
+                    "latency_ms": 0,
+                    "f1": 0.0,
+                    "bleu1": 0.0,
+                    "judge_result": None,
+                    "citations": [],
+                    "warnings": [f"{type(error).__name__}: {error}"],
+                    "plan": None,
+                    "error": f"{type(error).__name__}: {error}",
+                })
+                checkpoint(usage_ledger, ".rows.jsonl", rows[-1], append=True)
+                continue
+            if resume and not str(answer.generated_text or "").strip():
+                raise RuntimeError(f"MemNexus returned an empty answer for {sample_id}")
             rows.append(
                 {
                     "system": "MemNexus",
                     "sample_id": sample.get("sample_id", "0"),
+                    "qa_index": qa["qa_index"],
                     "category": CATEGORY_NAMES[qa["category"]],
                     "category_id": qa["category"],
                     "question": qa["question"],
                     "evaluation_query": query,
                     "gold_answer": gold,
                     "prediction": answer.generated_text,
+                    "forced_abstain": is_forced_abstain(answer.generated_text)
+                    or bool(answer.reasoning.get("forced_abstain")),
                     "retrieved_sources": [
                         source.model_dump(mode="json") for source in answer.sources
                     ],
@@ -487,6 +740,12 @@ async def run_memnexus(
             "validation_rejections": dict(runtime.model.validation_rejections),
             "collection_queries_enabled": runtime.settings.collection_queries_enabled,
             "collection_index_limit": min(runtime.settings.max_candidates, 120),
+            # Provenance for the freeze: a run is only comparable to another run
+            # if both consumed the same sha256, and only honest about its cost
+            # if memory_base_replayed says whether the build was actually paid.
+            "memory_base_replayed": replayed is not None,
+            "memory_snapshot_sha256": (replayed or {}).get("sha256"),
+            "memory_snapshot_dir": str(snapshot_dir) if snapshot_dir is not None else None,
         }
         checkpoint(usage_ledger, ".stage.json", stage)
     return stage, rows
@@ -515,25 +774,16 @@ def judge_rows(
         use_streaming=False,
     )
     for row in rows:
-        prompt = (
-            "Judge whether the prediction correctly answers the question according to the gold answer. "
-            "Ignore style and accept semantically equivalent concise answers. Reject contradictions, "
-            "unsupported additions that change the answer, or missing core facts. Return one JSON object "
-            "with label CORRECT or WRONG and a short reason.\n"
-            + json.dumps(
-                {
-                    "question": row["question"],
-                    "gold_answer": row["gold_answer"],
-                    "prediction": row["prediction"],
-                },
-                ensure_ascii=False,
-            )
+        # Appendix A.4 verbatim.  The paper uses this judge for LongMemEval-S
+        # only, and it deliberately asks for a generous grader; tightening the
+        # wording changes the measured accuracy, so it is shared from one place.
+        prompt = JUDGE_INSTRUCTION.format(
+            question=row["question"],
+            gold_answer=row["gold_answer"],
+            generated_answer=row["prediction"],
         )
         response = judge.chat_completion(
-            [
-                {"role": "system", "content": "You are a strict blinded QA evaluator."},
-                {"role": "user", "content": prompt},
-            ],
+            [{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             max_retries=2,
         )
@@ -559,6 +809,10 @@ def judge_rows(
 
 def aggregate(rows: list[dict]) -> dict:
     result = {}
+    # Paper protocol (§3.1): the headline numbers are per-reasoning-type F1/BLEU-1
+    # with an unweighted Average, plus a separate adversarial success rate.  The
+    # legacy mean_f1/accuracy fields stay for continuity but are diagnostics only.
+    paper = paper_table(rows)
     for system in ("SimpleMem", "MemNexus"):
         selected = [row for row in rows if row["system"] == system]
         result[system] = {
@@ -578,6 +832,10 @@ def aggregate(rows: list[dict]) -> dict:
             "answer_cost_rmb": sum(
                 row["model_calls"].get("cost_rmb", 0) for row in selected
             ),
+            "paper_average_f1": (paper["systems"].get(system) or {}).get("average_f1"),
+            "paper_average_bleu1": (paper["systems"].get(system) or {}).get("average_bleu1"),
+            "paper_adversarial_sr": (paper["systems"].get(system) or {}).get("adversarial_sr"),
+            "paper_f1_by_type": (paper["systems"].get(system) or {}).get("f1_by_type"),
             "by_category": {
                 row["category"]: {
                     "judge_result": row["judge_result"],

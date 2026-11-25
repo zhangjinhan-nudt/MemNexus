@@ -47,7 +47,7 @@ def measure(query, turns, unit_by_turn, gold):
         semantic = {record_key(record): _cosine(query_vector, vector) for (record, _), vector in zip(records, document_vectors)}
     result = ground_evidence(query, QueryPlan(required_info=[query]), [],
                              session_id="eval", current_turns=turns, resolved_turns={},
-                             blocked_events=set(), raw_limit=3, max_sources=3, budget=5000,
+                             blocked_events=set(), max_sources=3, budget=5000,
                              semantic_scores=semantic)
     selected = [unit_by_turn[e["turn_id"]] for hit in result.sources for e in hit.metadata["source_events"]]
     matched = set(selected) & set(gold)

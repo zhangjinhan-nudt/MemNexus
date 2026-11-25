@@ -18,7 +18,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, nullcontext
 from copy import deepcopy
 from datetime import UTC
 from pathlib import Path
@@ -200,9 +200,68 @@ def load_fixed_sample(per_category: int = 1) -> tuple[dict, list[dict]]:
     return sample, selected
 
 
+def _max_turn_chars() -> int:
+    """Admission limit for one turn; must match MEMORY_MAX_TURN_CHARS.
+
+    The runtime compares the *serialised* turn against this value, so the
+    splitter keeps 2500 characters of headroom for the JSON wrapper and the
+    surrounding event metadata.
+    """
+    return max(1000, int(os.getenv("MEMORY_MAX_TURN_CHARS", "6000")) - 2500)
+
+
+def _split_oversized(text: str, limit: int | None = None) -> list[str]:
+    """Split one over-long utterance into <=limit chunks at natural boundaries.
+
+    LongMemEval-S contains utterances up to ~5.8k characters. The runtime
+    rejects a single turn whose estimate exceeds the ingest window, which would
+    fail the whole question. Splitting is applied to *both* systems identically
+    (both read turns from this function), so it is input normalisation, not a
+    memory advantage. Boundaries: paragraph, then sentence, then hard cut.
+    """
+    if len(text) <= (limit := limit or _max_turn_chars()):
+        return [text]
+    units: list[str] = []
+    for para in text.split("\n"):
+        if not para.strip():
+            continue
+        if len(para) <= limit:
+            units.append(para)
+            continue
+        buffer = ""
+        for sentence in re.split(r"(?<=[.!?])\s+", para):
+            piece = sentence
+            while len(piece) > limit:
+                units.append(piece[:limit])
+                piece = piece[limit:]
+            if not piece:
+                continue
+            if len(buffer) + len(piece) + 1 <= limit:
+                buffer = f"{buffer} {piece}".strip()
+            else:
+                if buffer:
+                    units.append(buffer)
+                buffer = piece
+        if buffer:
+            units.append(buffer)
+    chunks: list[str] = []
+    buffer = ""
+    for unit in units:
+        if len(buffer) + len(unit) + 1 <= limit:
+            buffer = f"{buffer}\n{unit}".strip() if buffer else unit
+        else:
+            if buffer:
+                chunks.append(buffer)
+            buffer = unit
+    if buffer:
+        chunks.append(buffer)
+    return chunks or [text[:limit]]
+
+
 def raw_turns(sample: dict, max_session: int | None = None) -> list[dict]:
     conversation = sample["conversation"]
     turns = []
+    split_long = sample.get("dataset") == "LongMemEval-S"
     for key in sorted(
         (
             key
@@ -219,14 +278,21 @@ def raw_turns(sample: dict, max_session: int | None = None) -> list[dict]:
             if turn.get("blip_caption"):
                 text = f"[Image: {turn['blip_caption']}] " + text
             if text.strip():
-                turns.append(
-                    {
-                        "dia_id": turn["dia_id"],
-                        "speaker": turn["speaker"],
-                        "text": text if sample.get("dataset") == "LongMemEval-S" else text.strip(),
-                        "date_time": date_text,
-                    }
-                )
+                pieces = _split_oversized(text) if split_long else [text]
+                for piece_index, piece in enumerate(pieces):
+                    turns.append(
+                        {
+                            "dia_id": (
+                                turn["dia_id"]
+                                if len(pieces) == 1
+                                else f"{turn['dia_id']}#c{piece_index + 1}"
+                            ),
+                            "speaker": turn["speaker"],
+                            "text": piece if split_long else piece.strip(),
+                            "date_time": date_text,
+                            "source_session": key,
+                        }
+                    )
     if not turns:
         raise RuntimeError("Official sample contains no usable turns")
     return turns
@@ -286,6 +352,44 @@ def load_resumable_rows(usage_ledger: Path | None, sample_id: str) -> dict[tuple
     return completed
 
 
+def validate_qa_history_scope(record: dict, source_sessions: tuple[str, ...], source_read_scope: str) -> None:
+    """Reject changed QA permissions without rewriting historical metadata."""
+    containers = [record]
+    if isinstance(record.get("reasoning"), dict):
+        containers.append(record["reasoning"])
+    scopes = [item["source_read_scope"] for item in containers if "source_read_scope" in item] or ["quotes"]
+    grants = [item["authorized_source_sessions"] for item in containers
+              if "authorized_source_sessions" in item] or [[]]
+    if any(value != source_read_scope for value in scopes) or any(
+        not isinstance(value, (list, tuple)) or not all(isinstance(sid, str) for sid in value)
+        or tuple(sorted(value)) != source_sessions for value in grants
+    ):
+        raise RuntimeError(
+            "Checkpoint used a different QA history scope. Reuse the build snapshot in a new QA results directory."
+        )
+
+
+def validate_completed_qa_history(result: dict, source_read_scope: str) -> None:
+    """Gate current-run reuse; historical read-only collectors do not call this."""
+    stage = result.get("stage", {})
+    if stage.get("source_read_scope", "quotes") != source_read_scope:
+        raise RuntimeError("Completed unit used a different QA history scope; use a new QA results directory.")
+    if source_read_scope == "events":
+        history = stage.get("history_session_ids")
+        qa_session = stage.get("qa_session_id")
+        if (not isinstance(history, list) or not history
+                or not all(isinstance(sid, str) and sid for sid in history)
+                or len(set(history)) != len(history) or qa_session not in history
+                or len(history) != stage.get("internal_session_count")):
+            raise RuntimeError("Completed unit lacks a verifiable full QA history grant; use a new results directory.")
+        expected = tuple(sorted(set(history) - {qa_session}))
+    else:
+        expected = ()
+    validate_qa_history_scope(stage, expected, source_read_scope)
+    for row in result["rows"]:
+        validate_qa_history_scope(row, expected, source_read_scope)
+
+
 def run_simplemem(
     sample: dict,
     questions: list[dict],
@@ -309,7 +413,13 @@ def run_simplemem(
     if sample.get("expected_raw_turns") is not None and len(turns) != sample["expected_raw_turns"]:
         raise ValueError("Raw conversation coverage mismatch before any provider request")
     embedder = RemoteQwenEmbedding()
-    with tempfile.TemporaryDirectory(prefix="simplemem-locomo-pilot-") as folder:
+    # Preserve the native index beside an explicit audit ledger. No rebuild or
+    # algorithm change: this only prevents successful/failed builds disappearing.
+    persistent_folder = usage_ledger.with_suffix(".index") if usage_ledger else None
+    if persistent_folder:
+        persistent_folder.mkdir(parents=True, exist_ok=False)
+    with (nullcontext(str(persistent_folder)) if persistent_folder
+          else tempfile.TemporaryDirectory(prefix="simplemem-locomo-pilot-")) as folder:
         system = SimpleMemSystem(
             db_path=str(Path(folder) / "lancedb"),
             clear_db=True,
@@ -319,6 +429,13 @@ def run_simplemem(
             max_retrieval_workers=1,
             embedding_model=embedder,
         )
+        # Conversation units run in threads: environment variables are process
+        # global and cannot carry per-unit accounting identity. Bind the client
+        # before its first provider request (initialization only builds objects).
+        system.llm_client.ledger_path = str(
+            usage_ledger or ROOT / "result" / "simplemem_usage_live.json"
+        )
+        system.llm_client.cost_limit_rmb = component_budget
         build_before = dict(system.llm_client.usage)
         started = time.perf_counter()
         dialogues = [
@@ -428,12 +545,32 @@ def parse_occurred_at(value: str):
 
 async def build_memory_base(
     runtime, scope, session, turns: list[dict], longmemeval: bool
-) -> int:
-    """Ingest every turn and drain extraction. Returns the batch count."""
+):
+    """Ingest unchanged turns; LME source boundaries own extraction context.
+
+    Return the batch count and final history session used for QA.
+    """
     from agent_memory.models import Event, TurnInput
 
     batches = 0
+    by_topic = {s.topic: s for s in runtime.store.sessions(scope)}
+    if len(by_topic) != len(runtime.store.sessions(scope)):
+        raise ValueError("Ambiguous session topics in this benchmark component")
+    async def drain(active):
+        nonlocal batches
+        while True:
+            extracted = await runtime.extract(scope, active.session_id)
+            if extracted["status"] == "idle":
+                break
+            batches += 1
     for index, turn in enumerate(turns, 1):
+        if longmemeval:
+            topic = "LongMemEval-S history: " + turn["source_session"]
+            if session.topic != topic:
+                await drain(session)
+                if topic not in by_topic:
+                    by_topic[topic] = runtime.store.create_session(scope, topic)
+                session = by_topic[topic]
         content = turn["text"] if longmemeval else f"{turn['speaker']}: {turn['text']}"
         chunks = [content]
         for part, chunk in enumerate(chunks):
@@ -456,12 +593,43 @@ async def build_memory_base(
                 extracted = await runtime.extract(scope, session.session_id)
                 if extracted["status"] != "idle":
                     batches += 1
-    while True:
-        extracted = await runtime.extract(scope, session.session_id)
-        if extracted["status"] == "idle":
-            break
-        batches += 1
-    return batches
+    await drain(session)
+    return batches, session
+
+
+def restore_budget_usage(client, usage_ledger: Path | None, *, resume: bool) -> None:
+    """Retain paid/unknown attempts across process retries of the same unit."""
+    if not resume or usage_ledger is None or not usage_ledger.exists():
+        return
+    previous = json.loads(usage_ledger.read_text(encoding="utf-8"))
+    required = {"cost_rmb", "input_tokens", "output_tokens", "provider_attempts"}
+    if not isinstance(previous, dict) or not required <= previous.keys():
+        raise ValueError("Cannot resume an incomplete usage ledger")
+    for key, value in previous.items():
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"Invalid prior usage field: {key}")
+    if previous.get("reserved_rmb", 0):
+        raise RuntimeError("Unsettled prior provider reservation; reconcile before resuming")
+    # unknown_usage_upper_bound_rmb has already been included in cost_rmb by
+    # the provider. Do not add it a second time or reset request attempt IDs.
+    client.usage.update(previous)
+
+
+def benchmark_memory_settings(database: Path):
+    """The effective settings used for a native benchmark runtime."""
+    from agent_memory.settings import Settings
+    return Settings(
+        db_path=database,
+        pending_turns=5,
+        context_turns=int(os.getenv("MEMORY_CONTEXT_TURNS", "15")),
+        model_timeout=180,
+        model_max_tokens=int(os.getenv("EXPERIMENT_MEMNEXUS_MAX_TOKENS", "4096")),
+        planner_mode=os.getenv("MEMORY_PLANNER_MODE", "model"),
+        acceleration_enabled=False,
+        output_language="en",
+        evidence_grounding_enabled=True,
+        grounding_semantic_enabled=False,
+    )
 
 
 async def run_memnexus(
@@ -487,7 +655,6 @@ async def run_memnexus(
     from agent_memory.models import Scope
     from agent_memory.providers import BudgetExceededError as MemNexusBudgetExceededError
     from agent_memory.runtime import MemoryRuntime
-    from agent_memory.settings import Settings
 
     turns = raw_turns(
         sample, ORACLE_MAX_SESSION if max_session is None else max_session
@@ -516,32 +683,25 @@ async def run_memnexus(
         # Replay happens before the runtime opens the file, so the runtime does
         # no ingestion at all and QA sees exactly the frozen memory set.
         replayed = None
+        snapshot_thawed = False
         if snapshot_dir is not None:
             if memory_snapshot.available(snapshot_dir, sample_id):
                 replayed = memory_snapshot.thaw(snapshot_dir, sample_id, database)
+                snapshot_thawed = True
             elif require_snapshot:
                 raise RuntimeError(
                     f"No memory snapshot for {sample_id!r} in {snapshot_dir} "
                     "and --require-snapshots forbids rebuilding it"
                 )
-        runtime = MemoryRuntime.from_settings(
-            Settings(
-                db_path=database,
-                pending_turns=5,
-                context_turns=int(os.getenv("MEMORY_CONTEXT_TURNS", "15")),
-                model_timeout=180,
-                model_max_tokens=int(os.getenv("EXPERIMENT_MEMNEXUS_MAX_TOKENS", "4096")),
-                planner_mode=os.getenv("MEMORY_PLANNER_MODE", "model"),
-                acceleration_enabled=False,
-                output_language="en",
-                evidence_grounding_enabled=True,
-                grounding_semantic_enabled=False,
-                grounding_max_raw_sources=3,
-            )
-        )
+        runtime = MemoryRuntime.from_settings(benchmark_memory_settings(database))
         resources.push_async_callback(runtime.close)
         if runtime.model is None or runtime.retriever.embedder is None:
             raise RuntimeError("MemNexus model or Qwen embedding is not configured")
+        runtime.model.ledger_path = str(
+            usage_ledger or ROOT / "result" / "memnexus_usage_live.json"
+        )
+        runtime.model.cost_limit_rmb = component_budget
+        restore_budget_usage(runtime.model, usage_ledger, resume=resume)
         scope = Scope(tenant_id="locomo-pilot", owner_id=sample_id)
         build_before = dict(runtime.model.usage)
         started = time.perf_counter()
@@ -549,11 +709,27 @@ async def run_memnexus(
         if replayed is not None:
             if not sessions:
                 raise RuntimeError(f"Snapshot for {sample_id!r} contains no session")
-            session = sessions[0]
+            selected_id = replayed.get("qa_session_id")
+            if selected_id:
+                session = runtime.store.get_session(scope, selected_id)
+            elif len(sessions) == 1:
+                # Old flat snapshots remain explicitly old flat snapshots.
+                session = sessions[0]
+            else:
+                raise RuntimeError("A multi-session snapshot needs an explicit QA session")
             extraction_batches = int(replayed.get("extraction_batches", 0))
             build_ms = 0.0
         else:
-            if persistent_build and sessions:
+            if longmemeval:
+                topic = "LongMemEval-S history: " + turns[0]["source_session"]
+                allowed_topics = {"LongMemEval-S history: " + t["source_session"] for t in turns}
+                if any(s.topic not in allowed_topics for s in sessions):
+                    raise RuntimeError("Old flat build cannot be resumed as a session-preserving build; use a new component")
+                matching = [s for s in sessions if s.topic == topic]
+                if len(matching) > 1:
+                    raise RuntimeError("Duplicate history session identity")
+                session = matching[0] if matching else runtime.store.create_session(scope, topic)
+            elif persistent_build and sessions:
                 if len(sessions) != 1:
                     raise RuntimeError(
                         f"Resumable build for {sample_id!r} has {len(sessions)} sessions"
@@ -561,17 +737,41 @@ async def run_memnexus(
                 session = sessions[0]
             else:
                 session = runtime.store.create_session(scope, "LoCoMo official pilot")
-            processed_before = session.processed_sequence
-            extraction_batches = await build_memory_base(
+            # In this ingestion-only database, append and extraction each add
+            # one revision. Subtract committed turns to count prior extraction
+            # windows exactly, including short boundary flushes. No QA or
+            # manual state mutation occurs before a build is frozen.
+            committed_before = sum(s.revision - len(runtime.store.turns(scope, s.session_id))
+                                   for s in sessions)
+            if committed_before < 0:
+                raise RuntimeError("Inconsistent ingestion revision accounting")
+            extraction_batches, session = await build_memory_base(
                 runtime, scope, session, turns, longmemeval
             )
-            # build_memory_base counts calls made by this process.  Include the
-            # already committed five-turn batches for snapshot provenance.
-            extraction_batches += processed_before // 5
+            extraction_batches += committed_before
             build_ms = (time.perf_counter() - started) * 1000
         memories = runtime.store.memories(scope)
-        if not memories:
-            raise RuntimeError("MemNexus memory build produced zero memories")
+        all_sessions = runtime.store.sessions(scope)
+        if replayed is not None:
+            history_ids = replayed.get("history_session_ids") or [session.session_id]
+        elif longmemeval:
+            by_topic = {s.topic: s.session_id for s in all_sessions}
+            history_ids = [by_topic["LongMemEval-S history: " + key]
+                           for key in dict.fromkeys(t["source_session"] for t in turns)]
+        else:
+            history_ids = [session.session_id]
+        stored_turns = [turn for sid in history_ids for turn in runtime.store.turns(scope, sid)]
+        if len(stored_turns) != len(turns):
+            raise RuntimeError("Snapshot/history session coverage does not match the full source history")
+        # The benchmark supplies the complete haystack for this question. Its
+        # source boundaries are available to both systems independently of labels.
+        source_sessions = tuple(sorted(set(history_ids) - {session.session_id})) if longmemeval else ()
+        source_read_scope = "events" if longmemeval else "quotes"
+        history_access = {"authorized_source_sessions": list(source_sessions),
+                          "source_read_scope": source_read_scope}
+        degraded_raw_only = not memories
+        if degraded_raw_only and not runtime.store.turns(scope, session.session_id):
+            raise RuntimeError("MemNexus memory build produced neither memories nor raw turns")
         # A replay must report no build spend; anything else would silently
         # double-count money that was paid on the run that froze the base.
         build_usage = (
@@ -580,8 +780,9 @@ async def run_memnexus(
             else usage_delta(runtime.model.usage, build_before)
         )
         if snapshot_dir is not None and replayed is None:
-            # Freeze only after the base is proven non-empty: an empty snapshot
-            # would replay as a permanently, silently broken condition.
+            # Raw turns are usable evidence even if no fact was compressed.
+            # Record this degraded build explicitly; it is not a successful
+            # extraction and must remain visible in benchmark accounting.
             replayed = memory_snapshot.freeze(
                 runtime.store,
                 snapshot_dir,
@@ -591,8 +792,12 @@ async def run_memnexus(
                     "model": os.getenv("MEMORY_MODEL_NAME", ""),
                     "raw_turns": len(turns),
                     "memory_count": len(memories),
+                    "degraded_raw_only": degraded_raw_only,
                     "extraction_batches": extraction_batches,
                     "build_usage": build_usage,
+                    "session_layout": "dataset_sessions" if longmemeval else "single_session",
+                    "qa_session_id": session.session_id,
+                    "history_session_ids": history_ids,
                 },
             )
         checkpoint(
@@ -602,7 +807,7 @@ async def run_memnexus(
                 "sample_id": sample["sample_id"],
                 "turns": [
                     turn.model_dump(mode="json")
-                    for turn in runtime.store.turns(scope, session.session_id)
+                    for turn in stored_turns
                 ],
                 "memories": [memory.model_dump(mode="json") for memory in memories],
                 "build_usage": build_usage,
@@ -617,6 +822,7 @@ async def run_memnexus(
                 "question": qa["question"], "evaluation_query": query, "gold_answer": gold,
             })
             if key in completed:
+                validate_qa_history_scope(completed[key], source_sessions, source_read_scope)
                 rows.append(completed[key])
                 continue
             before = dict(runtime.model.usage)
@@ -631,6 +837,8 @@ async def run_memnexus(
                         timeout=answer_timeout,
                         accelerate=False,
                         prepare=False,
+                        source_session_ids=source_sessions,
+                        **({"source_read_scope": "events"} if longmemeval else {}),
                     )
                     break
                 except (Exception, MemNexusBudgetExceededError) as caught:
@@ -662,6 +870,7 @@ async def run_memnexus(
                     "question": qa["question"],
                     "evaluation_query": query,
                     "gold_answer": gold,
+                    **history_access,
                     # 降级拒答措辞必须非空：跑批器把空预测判为单元失败
                     # （"empty predictions are not a completed unit"），
                     # 那正是本次修复要消除的传染路径。非对抗题上该行 F1≈0，
@@ -676,7 +885,7 @@ async def run_memnexus(
                     "model_calls": usage_delta(runtime.model.usage, before),
                     "runtime_model_calls": {},
                     "grounding": {},
-                    "reasoning": {"answer_path": "failed"},
+                    "reasoning": {"answer_path": "failed", **history_access},
                     "retrieval_ms": 0,
                     "generation_ms": 0,
                     "latency_ms": 0,
@@ -702,6 +911,7 @@ async def run_memnexus(
                     "question": qa["question"],
                     "evaluation_query": query,
                     "gold_answer": gold,
+                    **history_access,
                     "prediction": answer.generated_text,
                     "forced_abstain": is_forced_abstain(answer.generated_text)
                     or bool(answer.reasoning.get("forced_abstain")),
@@ -712,7 +922,7 @@ async def run_memnexus(
                     "model_calls": usage_delta(runtime.model.usage, before),
                     "runtime_model_calls": answer.model_calls.model_dump(mode="json"),
                     "grounding": answer.grounding.model_dump(mode="json"),
-                    "reasoning": answer.reasoning,
+                    "reasoning": {**answer.reasoning, **history_access},
                     "retrieval_ms": answer.acceleration.retrieval_ms,
                     "generation_ms": answer.acceleration.generation_ms,
                     "latency_ms": answer.elapsed_ms,
@@ -733,17 +943,24 @@ async def run_memnexus(
             "raw_turns": len(turns),
             "memory_count": len(memories),
             "extraction_batches": extraction_batches,
+            "internal_session_count": len(all_sessions),
+            "session_layout": ((replayed or {}).get("session_layout", "single_session")
+                               if snapshot_thawed else "dataset_sessions" if longmemeval else "single_session"),
+            "qa_session_id": session.session_id,
+            "history_session_ids": history_ids,
             "build_ms": build_ms,
+            **history_access,
             "build_usage": build_usage,
             "total_usage": dict(runtime.model.usage),
             "rejected_question_candidates": runtime.model.rejected_question_candidates,
             "validation_rejections": dict(runtime.model.validation_rejections),
-            "collection_queries_enabled": runtime.settings.collection_queries_enabled,
+            "answer_pipeline": "source_bound_synthesis",
+            "degraded_raw_only": degraded_raw_only,
             "collection_index_limit": min(runtime.settings.max_candidates, 120),
             # Provenance for the freeze: a run is only comparable to another run
             # if both consumed the same sha256, and only honest about its cost
             # if memory_base_replayed says whether the build was actually paid.
-            "memory_base_replayed": replayed is not None,
+            "memory_base_replayed": snapshot_thawed,
             "memory_snapshot_sha256": (replayed or {}).get("sha256"),
             "memory_snapshot_dir": str(snapshot_dir) if snapshot_dir is not None else None,
         }

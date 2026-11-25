@@ -1,0 +1,26 @@
+{
+  "lme_first_request_equal": {
+    "gpt4_f2262a51_S": false,
+    "2ce6a0f2_S": false,
+    "95228167_S": false,
+    "01493427_S": false,
+    "1f2b8d4f_S": false,
+    "18dcd5a5_S": true,
+    "06f04340_S": false,
+    "0862e8bf_abs_S": false,
+    "0bc8ad93_S": false,
+    "0e4e4c46_S": false,
+    "27016adc_S": false,
+    "1903aded_S": false,
+    "0a34ad58_S": false,
+    "15745da0_abs_S": false,
+    "4dfccbf8_S": false
+  },
+  "locomo_requests_equal": [
+    false,
+    true,
+    false,
+    true,
+    false
+  ]
+}

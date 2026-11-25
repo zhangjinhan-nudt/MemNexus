@@ -5,17 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from agent_memory.composition import (
-    AnswerAtom,
-    AnswerIR,
-    CollectionExtraction,
-    Coverage,
-    adjudicated_answer,
-    execute,
-    indexed_answer,
-    render,
-    validate_extraction,
-)
+from agent_memory.composition import collection_sources
 from agent_memory.models import (
     Candidate,
     CollectionQuery,
@@ -28,22 +18,13 @@ from agent_memory.models import (
     QueryPlan,
     Scope,
     TurnInput,
+    utcnow,
 )
 from agent_memory.ports import ConflictError
 from agent_memory.runtime import MemoryRuntime
 from agent_memory.settings import Settings
 from agent_memory.store import SQLiteStore
-
-
-class QueryModel:
-    def __init__(self, query, **plan_fields):
-        self.query, self.fields = query, plan_fields
-
-    async def plan(self, question, context):
-        return QueryPlan(collection_query=self.query, **self.fields)
-
-    async def answer(self, prompt):
-        raise AssertionError("Typed collection answers must not call a free-form writer")
+from agent_memory.synthesis import AnswerTable
 
 
 def add(
@@ -108,65 +89,14 @@ def env(tmp_path):
     asyncio.run(runtime.close())
 
 
-def ask(runtime, scope, session, query, **plan_fields):
-    runtime.model = runtime.retriever.model = QueryModel(query, **plan_fields)
-    return asyncio.run(
-        runtime.answer(
-            scope, session.session_id, "List the requested items.", prepare=False, accelerate=False, top_k=1
-        )
-    )
-
-
-def values(answer):
-    return {item["value"] for item in answer.reasoning["answer_ir"]["items"]}
-
-
-def test_group_preserves_all_members_and_bypasses_top_k_writer(env):
-    runtime, scope, session = env
-    add(runtime, scope, session, ["swimming", "running", "chess"])
-    add(runtime, scope, session, ["drawing", "climbing"], subject="Blair")
-    query = CollectionQuery(subjects=["Alex", "Blair"], predicate="hobbies", operation="group")
-    answer = ask(runtime, scope, session, query)
-    assert values(answer) == {"swimming", "running", "chess", "drawing", "climbing"}
-    assert answer.model_calls.answer_calls == 0 and answer.model_calls.plan_calls == 1
-    assert "Alex:" in answer.generated_text and "Blair:" in answer.generated_text
-    assert answer.reasoning["answer_ir"]["coverage"]["output_complete"]
-    assert answer.reasoning["answer_ir"]["coverage"]["extraction_completeness"] == "not_proven"
-    receipt = runtime.store.get_answer_receipt(scope, session.session_id, answer.answer_id)
-    assert receipt.reasoning == answer.reasoning
-
-
-def test_intersection_keeps_both_premises_and_duplicate_mentions(env):
-    runtime, scope, session = env
-    add(runtime, scope, session, ["swimming", "chess"])
-    add(runtime, scope, session, ["swimming"], day=2)
-    add(runtime, scope, session, ["swimming", "drawing"], subject="Blair")
-    answer = ask(
-        runtime,
-        scope,
-        session,
-        CollectionQuery(subjects=["Alex", "Blair"], predicate="hobbies", operation="intersection"),
-    )
-    assert values(answer) == {"swimming"}
-    item = answer.reasoning["answer_ir"]["items"][0]
-    assert {p["subject"] for p in item["premises"]} == {"Alex", "Blair"}
-    assert len(answer.citations) == 3
-
-
-def test_member_remove_replace_retract_and_historical_query(env):
-    runtime, scope, session = env
-    add(runtime, scope, session, ["swimming", "chess"])
-    removal, _ = add(runtime, scope, session, ["swimming"], operation="remove", day=2)
-    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
-    assert values(ask(runtime, scope, session, query)) == {"chess"}
-    historical = ask(runtime, scope, session, query, as_of=datetime(2024, 1, 1, 12, tzinfo=UTC))
-    assert values(historical) == {"swimming", "chess"}
-    runtime.store.evolve(scope, removal.memory_id, EvolutionInput(action="retract", expected_version=1))
-    assert values(ask(runtime, scope, session, query)) == {"swimming", "chess"}
-    replacement, _ = add(runtime, scope, session, ["drawing"], operation="replace_set", day=3)
-    assert values(ask(runtime, scope, session, query)) == {"drawing"}
-    runtime.store.evolve(scope, replacement.memory_id, EvolutionInput(action="retract", expected_version=1))
-    assert values(ask(runtime, scope, session, query)) == {"swimming", "chess"}
+def selected_sources(runtime, scope, session, query, *, as_of=None):
+    plan = QueryPlan(collection_query=query, as_of=as_of)
+    memories = [memory for memory in runtime.store.collection_memories(scope, query)
+                if runtime.retriever._eligible(memory, session, plan, utcnow())]
+    references = [ref.turn_id for memory in memories
+                  for ref in memory.evidence + [e for member in memory.semantics.members for e in member.evidence]]
+    turns = runtime.store.source_turns(scope, references)
+    return collection_sources(query, memories, turns)
 
 
 def test_many_valued_long_term_records_coexist(env):
@@ -174,11 +104,112 @@ def test_many_valued_long_term_records_coexist(env):
     first, _ = add(runtime, scope, session, ["swimming"], durable=True)
     second, _ = add(runtime, scope, session, ["chess"], durable=True, day=2)
     asyncio.run(runtime.long_term.process_extraction(scope, [first, second]))
-    assert all(m.status == "active" and m.tier == "long" for m in runtime.store.memories(scope))
-    assert values(ask(runtime, scope, session, CollectionQuery(subjects=["Alex"], predicate="hobbies"))) == {
-        "swimming",
-        "chess",
+    memories = runtime.store.memories(scope)
+    assert {m.memory_id for m in memories} == {first.memory_id, second.memory_id}
+    assert all(m.status == "active" and m.tier == "long" for m in memories)
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
+    assert {hit.metadata["value"] for hit in selected_sources(runtime, scope, session, query)} == {
+        "swimming", "chess",
     }
+
+
+def test_member_operations_retraction_and_historical_source_eligibility(env):
+    runtime, scope, session = env
+    original, _ = add(runtime, scope, session, ["swimming", "chess"])
+    removal, _ = add(runtime, scope, session, ["swimming"], operation="remove", day=2)
+    replacement, _ = add(runtime, scope, session, ["drawing"], operation="replace_set", day=3)
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
+
+    def ids(**kwargs):
+        return {hit.metadata["memory_id"] for hit in selected_sources(runtime, scope, session, query, **kwargs)}
+
+    assert ids() == {original.memory_id, removal.memory_id, replacement.memory_id}
+    assert ids(as_of=datetime(2024, 1, 1, 12, tzinfo=UTC)) == {original.memory_id}
+    assert ids(as_of=datetime(2024, 1, 2, 12, tzinfo=UTC)) == {original.memory_id, removal.memory_id}
+    runtime.store.evolve(scope, removal.memory_id, EvolutionInput(action="retract", expected_version=1))
+    assert ids() == {original.memory_id, replacement.memory_id}
+    runtime.store.evolve(scope, replacement.memory_id, EvolutionInput(action="retract", expected_version=1))
+    assert ids() == {original.memory_id}
+    stored = {m.memory_id: m for m in runtime.store.memories(scope)}
+    assert stored[removal.memory_id].semantics.operation == "remove"
+    assert stored[replacement.memory_id].semantics.operation == "replace_set"
+    assert stored[removal.memory_id].status == stored[replacement.memory_id].status == "retracted"
+
+
+def test_explicit_empty_snapshot_retains_its_source_and_canonical_operation(env):
+    runtime, scope, session = env
+    original, _ = add(runtime, scope, session, ["swimming"])
+    empty, turn = add(runtime, scope, session, [], operation="replace_set", day=2)
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
+    sources = selected_sources(runtime, scope, session, query)
+    assert {h.metadata["memory_id"] for h in sources} == {original.memory_id, empty.memory_id}
+    source = next(h for h in sources if h.metadata["memory_id"] == empty.memory_id)
+    assert source.metadata["source_events"][0]["text"] == turn.events[0].content
+    assert empty.semantics.operation == "replace_set" and not empty.semantics.members
+    assert not selected_sources(runtime, scope, session, query.model_copy(update={"predicate": "pets"}))
+
+
+def test_collection_sources_keep_original_order_quotes_and_limit(env):
+    runtime, scope, session = env
+    first, turn_a = add(runtime, scope, session, ["swimming"])
+    second, turn_b = add(runtime, scope, session, ["chess"], day=2)
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
+    turns = {turn.turn_id: turn for turn in [turn_a, turn_b]}
+    sources = collection_sources(query, [second, first], turns, limit=1)
+    assert [h.metadata["memory_id"] for h in sources] == [first.memory_id]
+    assert sources[0].metadata["source_events"][0]["text"] == turn_a.events[0].content
+    assert len(sources[0].metadata["source_events"]) == 1  # repeated member refs retain one original span
+    assert not collection_sources(query, [first, second], turns, limit=0)
+    assert [h.metadata["memory_id"] for h in collection_sources(
+        query, [first, second], turns
+    )] == [first.memory_id, second.memory_id]
+
+
+def test_collection_sources_require_every_reference_and_respect_evidence_policy(env, monkeypatch):
+    runtime, scope, session = env
+    memory, turn = add(runtime, scope, session, ["swimming"])
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
+    assert not collection_sources(query, [memory], {})
+    corrupted = memory.model_copy(deep=True)
+    corrupted.semantics.members[0].evidence[0].quote = "invented quote"
+    assert not collection_sources(query, [corrupted], {turn.turn_id: turn})
+    assistant = turn.model_copy(deep=True)
+    assistant.events[0].role = "assistant"
+    monkeypatch.setenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false")
+    assert not collection_sources(query, [memory], {turn.turn_id: assistant})
+    monkeypatch.setenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "true")
+    assert collection_sources(query, [memory], {turn.turn_id: assistant})
+    question = turn.model_copy(deep=True)
+    question.events[0].content = "Does Alex like swimming?"
+    question_memory = memory.model_copy(deep=True)
+    for ref in question_memory.evidence + question_memory.semantics.members[0].evidence:
+        ref.quote = question.events[0].content
+    assert not collection_sources(query, [question_memory], {turn.turn_id: question})
+
+
+def test_collection_sources_respect_event_and_assertion_filters(env):
+    runtime, scope, session = env
+    memory, turn = add(runtime, scope, session, ["swimming"])
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies", event_key="competition-a")
+    assert not collection_sources(query, [memory], {turn.turn_id: turn})
+    memory.semantics.event_key = "competition-b"
+    assert not collection_sources(query, [memory], {turn.turn_id: turn})
+    memory.semantics.event_key = "competition-a"
+    assert collection_sources(query, [memory], {turn.turn_id: turn})
+    memory.assertion = "planned"
+    assert not collection_sources(query, [memory], {turn.turn_id: turn})
+    assert collection_sources(query.model_copy(update={"assertions": ["planned"]}),
+                              [memory], {turn.turn_id: turn})
+
+
+def test_collection_relation_partition_still_requires_session_authorization(env):
+    runtime, scope, session = env
+    own, _ = add(runtime, scope, session, ["swimming"])
+    other_session = runtime.store.create_session(scope)
+    add(runtime, scope, other_session, ["chess"])
+    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
+    assert len(runtime.store.collection_memories(scope, query)) == 2
+    assert [h.metadata["memory_id"] for h in selected_sources(runtime, scope, session, query)] == [own.memory_id]
 
 
 def test_unknown_values_do_not_become_scalar_conflicts(env):
@@ -207,180 +238,6 @@ def test_projection_is_owner_scoped_rebuilt_on_upgrade_and_deleted(env):
         reopened.close()
 
 
-def test_count_uses_identities_not_mentions(env):
-    runtime, scope, session = env
-    add(runtime, scope, session, ["Max", "Ned"], predicate="pets", identity=True)
-    add(runtime, scope, session, ["Max"], predicate="pets", identity=True, day=2)
-    answer = ask(
-        runtime,
-        scope,
-        session,
-        CollectionQuery(subjects=["Alex"], predicate="pets", operation="count", count_unit="entity"),
-    )
-    assert values(answer) == {"2"}
-
-
-def test_missing_identity_and_budget_do_not_produce_exact_counts(env):
-    runtime, scope, session = env
-    memory, turn = add(runtime, scope, session, ["Max", "Ned"], predicate="pets")
-    query = CollectionQuery(subjects=["Alex"], predicate="pets", operation="count", count_unit="entity")
-    ir, _ = indexed_answer(query, [memory], {turn.turn_id: turn}, snapshot=(0, 0), pending=0)
-    assert not ir.items and "exact_count_not_established" in ir.coverage.unresolved
-    limited, _ = indexed_answer(query, [memory], {turn.turn_id: turn}, snapshot=(0, 0), pending=0, limit=0)
-    assert limited.coverage.budget_exhausted and not limited.items
-
-
-def test_empty_intersection_does_not_assert_absence():
-    ir = AnswerIR(
-        query=CollectionQuery(subjects=["Alex", "Blair"], predicate="hobbies", operation="intersection"),
-        atoms=[AnswerAtom(subject="Alex", value="chess", source_ids=[1])],
-    )
-    execute(ir)
-    assert "does not prove absence" in render(ir)
-    assert not ir.coverage.enumeration_complete
-
-
-def test_source_adjudication_is_complete_only_relative_to_selected_sources(env):
-    runtime, scope, session = env
-    memory, turn = add(runtime, scope, session, ["relief", "hope", "worry"], predicate="emotions")
-    query = CollectionQuery(subjects=["Alex"], predicate="emotions")
-    _, sources = indexed_answer(query, [memory], {turn.turn_id: turn}, snapshot=(0, 0), pending=0)
-    result = CollectionExtraction(
-        sources=[
-            {
-                "source_id": 1,
-                "reason": "three explicitly listed emotions",
-                "candidates": [
-                    {
-                        "subject": "Alex",
-                        "value": v,
-                        "quote": memory.content,
-                        "status": "accepted",
-                        "reason": "explicit member",
-                    }
-                    for v in ["relief", "hope", "worry"]
-                ],
-            }
-        ]
-    )
-    ir = adjudicated_answer(query, result, sources, snapshot=(0, 0), pending=0)
-    assert len(ir.items) == 3 and all(v in render(ir) for v in ["relief", "hope", "worry"])
-    assert not ir.coverage.enumeration_complete and ir.coverage.output_complete
-    with pytest.raises(ValueError, match="exactly once"):
-        validate_extraction(CollectionExtraction(sources=[]), query, sources)
-    result.sources[0].candidates[0].quote = "invented quote"
-    with pytest.raises(ValueError, match="original"):
-        validate_extraction(result, query, sources)
-
-
-def test_direct_count_statement_does_not_require_enumerating_names():
-    ir = AnswerIR(
-        query=CollectionQuery(subjects=["Alex"], predicate="pets", operation="count", count_unit="entity"),
-        atoms=[AnswerAtom(subject="Alex", value="three pets", quantity=3, source_ids=[1])],
-        coverage=Coverage(enumeration_complete=False),
-    )
-    assert execute(ir).items[0].value == "3"
-
-
-def test_distinct_same_named_entities_are_not_merged():
-    ir = AnswerIR(
-        query=CollectionQuery(subjects=["Alex"], predicate="pets", operation="count", count_unit="entity"),
-        atoms=[
-            AnswerAtom(subject="Alex", value="Max", identity=identity, source_ids=[1])
-            for identity in ["pet-1", "pet-2", "pet-1"]
-        ],
-        coverage=Coverage(enumeration_complete=True),
-    )
-    assert execute(ir).items[0].value == "2"
-
-
-def test_event_qualifier_prevents_cross_event_merging():
-    query = CollectionQuery(subjects=["Alex"], predicate="emotions", event_key="submission-a")
-    ir = AnswerIR(
-        query=query,
-        atoms=[
-            AnswerAtom(subject="Alex", value="hope", event_key="submission-a", source_ids=[1]),
-            AnswerAtom(subject="Alex", value="fear", event_key="submission-b", source_ids=[2]),
-        ],
-    )
-    assert {item.value for item in execute(ir).items} == {"hope"}
-
-
-def test_event_count_uses_occurrence_identity_not_topic_or_label():
-    query = CollectionQuery(subjects=["Alex"], predicate="trips", operation="count", count_unit="event")
-    ir = AnswerIR(
-        query=query,
-        coverage=Coverage(enumeration_complete=True),
-        atoms=[
-            AnswerAtom(
-                subject="Alex", value="Paris", event_key="holiday", event_identity=identity, source_ids=[1]
-            )
-            for identity in ["trip-1", "trip-2", "trip-1"]
-        ],
-    )
-    assert execute(ir).items[0].value == "2"
-    for atom in ir.atoms:
-        atom.event_identity = None
-    ir.coverage.unresolved.clear()
-    assert not execute(ir).items
-
-
-def test_semantic_normalization_keeps_intersection_proof_and_original_values(env):
-    runtime, scope, session = env
-    first, turn_a = add(runtime, scope, session, ["distributing food"], predicate="service")
-    second, turn_b = add(runtime, scope, session, ["food distribution"], predicate="service", subject="Blair")
-    query = CollectionQuery(subjects=["Alex", "Blair"], predicate="service", operation="intersection")
-    _, sources = indexed_answer(
-        query, [first, second], {t.turn_id: t for t in [turn_a, turn_b]}, snapshot=(0, 0), pending=0
-    )
-    decisions = CollectionExtraction(
-        sources=[
-            {
-                "source_id": i,
-                "reason": "fixture equivalent activity labels",
-                "candidates": [
-                    {
-                        "subject": m.subject,
-                        "value": m.value,
-                        "normalized_value": "food distribution",
-                        "quote": m.content,
-                        "status": "accepted",
-                        "reason": "same activity",
-                    }
-                ],
-            }
-            for i, m in enumerate([first, second], 1)
-        ]
-    )
-    ir = adjudicated_answer(query, decisions, sources, snapshot=(0, 0), pending=0)
-    assert len(ir.items) == 1 and len(ir.items[0].premises) == 2
-    assert ir.normalizations[0]["original_value"] == "distributing food"
-
-
-def test_source_adjudication_runtime_rechecks_snapshot_before_publish(env):
-    runtime, scope, session = env
-    memory, _ = add(runtime, scope, session, ["swimming"], cardinality="unknown")
-    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
-
-    class MutatingModel(QueryModel):
-        async def compose(self, spec, sources, question):
-            runtime.store.evolve(
-                scope, memory.memory_id, EvolutionInput(action="retract", expected_version=1)
-            )
-            return CollectionExtraction(
-                sources=[
-                    {"source_id": i, "reason": "no accepted items", "candidates": []}
-                    for i in range(1, len(sources) + 1)
-                ]
-            )
-
-    runtime.model = runtime.retriever.model = MutatingModel(query)
-    with pytest.raises(ConflictError, match="Memory changed"):
-        asyncio.run(
-            runtime.answer(scope, session.session_id, "What hobbies?", prepare=False, accelerate=False)
-        )
-
-
 def test_collection_member_cannot_smuggle_an_unverified_quote(env):
     runtime, scope, session = env
     memory, _ = add(runtime, scope, session, ["swimming"])
@@ -390,40 +247,92 @@ def test_collection_member_cannot_smuggle_an_unverified_quote(env):
         runtime.store.add_candidates(scope, session.session_id, [corrupted])
 
 
-def test_explicit_empty_snapshot_is_distinct_from_no_retrieval_hit(env):
+class CollectionAnswerModel:
+    def __init__(self, on_synthesis=None):
+        self.on_synthesis = on_synthesis
+        self.calls = 0
+        self.sources = []
+
+    async def plan(self, question, context):
+        return QueryPlan(collection_query=CollectionQuery(subjects=["Alex"], predicate="hobbies"))
+
+    async def synthesize(self, question, plan, sources, **kwargs):
+        self.calls += 1
+        self.sources = sources
+        if self.on_synthesis:
+            self.on_synthesis()
+        source_id, quote = next((i, event["text"]) for i, source in enumerate(sources, 1)
+                                for event in source.metadata["source_events"]
+                                if "swimming" in event["text"])
+        return AnswerTable.model_validate({"slots": [{"derivation": "Fixture audit of the cited evidence.", "target": question, "values": [{
+            "value": "swimming", "supports": [{"source_id": source_id, "quote": quote}]
+        }]}]})
+
+    async def compose(self, *args, **kwargs):
+        raise AssertionError("The retired collection answer route must not run")
+
+    async def bind_answer(self, *args, **kwargs):
+        raise AssertionError("The retired semantic answer route must not run")
+
+    async def answer(self, *args, **kwargs):
+        raise AssertionError("A structured adapter must use synthesis")
+
+
+def test_collection_retrieval_feeds_the_single_synthesis_answer_chain(env, monkeypatch):
+    runtime, scope, session = env
+    add(runtime, scope, session, ["swimming", "chess"])
+    model = CollectionAnswerModel()
+    runtime.model = runtime.retriever.model = model
+
+    def reject_unused_graph(*args, **kwargs):
+        raise AssertionError("Structured synthesis must not build an unused answer graph")
+
+    monkeypatch.setattr("agent_memory.runtime.EventGraph.from_hits", reject_unused_graph)
+    answer = asyncio.run(runtime.answer(scope, session.session_id, "What hobbies does Alex have?",
+                                        prepare=False, accelerate=False, top_k=1))
+    assert model.calls == answer.model_calls.answer_calls == 1
+    assert model.sources and any("chess" in e["text"] for h in model.sources
+                                 for e in h.metadata["source_events"])
+    assert answer.generated_text == "swimming"
+    assert answer.reasoning["answer_path"] == "source_bound_synthesis"
+    assert "answer_ir" not in answer.reasoning and "bound_answer" not in answer.reasoning
+    assert answer.reasoning["source_count"] == len(answer.sources)
+    assert answer.reasoning["source_event_count"] == sum(len(h.metadata["source_events"]) for h in answer.sources)
+    assert not {"graph_nodes", "graph_edges", "decided_order", "typed_negative_gate"} & answer.reasoning.keys()
+    assert answer.citations
+    receipt = runtime.store.get_answer_receipt(scope, session.session_id, answer.answer_id)
+    assert receipt.reasoning == answer.reasoning
+
+
+def test_collection_synthesis_rechecks_snapshot_before_publish(env):
+    runtime, scope, session = env
+    memory, _ = add(runtime, scope, session, ["swimming"])
+    model = CollectionAnswerModel(lambda: runtime.store.evolve(
+        scope, memory.memory_id, EvolutionInput(action="retract", expected_version=1)))
+    runtime.model = runtime.retriever.model = model
+    with pytest.raises(ConflictError, match="Memory changed"):
+        asyncio.run(runtime.answer(scope, session.session_id, "What hobbies does Alex have?",
+                                   prepare=False, accelerate=False))
+
+
+def test_answer_only_adapter_remains_compatible_with_collection_plans(env):
     runtime, scope, session = env
     add(runtime, scope, session, ["swimming"])
-    add(runtime, scope, session, [], operation="replace_set", day=2)
-    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
-    answer = ask(runtime, scope, session, query)
-    assert values(answer) == {"none"}
-    assert answer.reasoning["answer_ir"]["items"][0]["rule"] == "explicit_empty"
-    count = ask(runtime, scope, session, query.model_copy(update={"operation": "count"}))
-    assert values(count) == {"0"}
 
+    class TextAdapter:
+        async def plan(self, question, context):
+            return QueryPlan(collection_query=CollectionQuery(subjects=["Alex"], predicate="hobbies"))
 
-def test_conflicting_explicit_counts_are_not_silently_merged():
-    ir = AnswerIR(
-        query=CollectionQuery(subjects=["Alex"], predicate="pets", operation="count"),
-        atoms=[AnswerAtom(subject="Alex", value="pets", quantity=q, source_ids=[1]) for q in [2, 3]],
-        coverage=Coverage(enumeration_complete=True),
-    )
-    assert not execute(ir).items
-    assert "conflicting_explicit_totals" in ir.coverage.unresolved
+        async def answer(self, prompt):
+            assert "swimming" in prompt
+            assert "STRUCTURED EVENT GRAPH" in prompt
+            assert "ORDER IS DETERMINED" not in prompt
+            return "swimming"
 
-
-def test_rejected_other_subject_is_a_valid_audit_record_but_not_an_answer(env):
-    runtime, scope, session = env
-    memory, turn = add(runtime, scope, session, ["swimming"], subject="Blair")
-    query = CollectionQuery(subjects=["Alex"], predicate="hobbies")
-    _, sources = indexed_answer(query, [memory], {turn.turn_id: turn}, snapshot=(0, 0), pending=0)
-    result = CollectionExtraction(sources=[{
-        "source_id": 1, "reason": "evidence concerns another person",
-        "candidates": [{"subject": "Blair", "value": "swimming", "quote": memory.content,
-                        "status": "rejected", "reason": "not Alex's hobby"}],
-    }])
-    ir = adjudicated_answer(query, result, sources, snapshot=(0, 0), pending=0)
-    assert not ir.items and ir.excluded[0]["subject"] == "Blair"
-    result.sources[0].candidates[0].status = "accepted"
-    with pytest.raises(ValueError, match="subject must belong"):
-        validate_extraction(result, query, sources)
+    runtime.model = runtime.retriever.model = TextAdapter()
+    answer = asyncio.run(runtime.answer(scope, session.session_id, "What hobbies does Alex have?",
+                                        prepare=False, accelerate=False))
+    assert answer.generated_text == "swimming"
+    assert answer.model_calls.answer_calls == 1
+    assert "answer_ir" not in answer.reasoning
+    assert answer.reasoning["graph_nodes"] > 0

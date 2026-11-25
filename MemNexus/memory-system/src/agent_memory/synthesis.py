@@ -5,17 +5,17 @@ The renderer cannot silently discard an accepted item; unresolved slots remain
 in the receipt. No benchmark categories, answers, or domain aliases live here.
 """
 
-import hashlib
-import json
 import re
 import unicodedata
-from datetime import date, datetime
-from typing import Literal
+from datetime import date, timedelta
+from decimal import Decimal, localcontext
+from typing import Literal, get_args
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
-from .models import AnswerContract, AnswerOutput, Contract, Hit, QueryPlan
-from .temporal import derive_times, render_phrase
+from .evidence_policy import assertion_span_supported, listed_label_supported, source_assertion_scopes
+from .models import AnswerContract, Contract, Hit
+from .temporal import calendar_difference, resolve_time_references
 
 
 class Support(Contract):
@@ -23,47 +23,209 @@ class Support(Contract):
     quote: str = Field(min_length=1, max_length=700)
 
 
-class DateDifference(Contract):
-    start: date
-    end: date
-    unit: Literal["days", "weeks", "years"]
+class RequestBinding(Contract):
+    """A reader's interpretation of a sourced fact relative to one request.
 
-    def value(self) -> str:
-        if self.end < self.start:
-            raise ValueError("Time difference must have ordered endpoints")
-        if self.unit == "years":
-            if (self.start.month, self.start.day) != (self.end.month, self.end.day):
-                raise ValueError("Whole-year difference requires equal month and day")
-            number = self.end.year - self.start.year
-        else:
-            days = (self.end - self.start).days
-            if self.unit == "weeks" and days % 7:
-                raise ValueError("Do not round an inexact interval to whole weeks")
-            number = days // 7 if self.unit == "weeks" else days
-        return f"{number} {self.unit}"
+    These fields are model declarations, not verified entailment labels.
+    Request addresses are checked; free-text matching labels are only audited.
+    Explicit conflicts in selected execution results/inputs authorize feedback.
+    Operand bindings may inherit the request address, never factual attributes.
+    """
+
+    request_id: str | None = Field(default=None, min_length=1, max_length=40)
+    subject: str = Field(default="", max_length=200)
+    relation: str = Field(default="", max_length=200)
+    qualifier: str = Field(default="", max_length=500)
+    event_identity: str | None = Field(default=None, min_length=1, max_length=200)
+    match: Literal["matched", "unresolved", "conflict"] = "unresolved"
+    reason: str = Field(default="", max_length=500)
+
+
+class TimeInputRef(Contract):
+    """One-based addresses into the existing source/time-reference payload.
+
+    An address selects a time mention, not proof that it belongs to the correct
+    real-world event. The reader still binds that meaning to this input.
+    """
+
+    source_id: int = Field(ge=1)
+    source_event: int = Field(ge=1)
+    reference: int = Field(ge=1)
+
+
+class BoundInput(Contract):
+    """A model-selected semantic input, directly linked to original source quotes."""
+
+    identity: str = Field(min_length=1, max_length=200)
+    statement: str = Field(min_length=1, max_length=500)
+    supports: list[Support] = Field(min_length=1, max_length=8)
+    amount: str | None = Field(default=None, pattern=r"^-?\d+(?:\.\d+)?$", max_length=60)
+    qualification: RequestBinding | None = None
+    time_ref: TimeInputRef | None = None
+
+
+TemporalOperation = Literal["time_difference", "time_compare", "time_since", "time_earlier", "time_later"]
+_TEMPORAL_OPERATIONS = frozenset(get_args(TemporalOperation))
 
 
 class SupportedValue(Contract):
-    value: str = Field(min_length=1, max_length=700)
-    supports: list[Support] = Field(min_length=1, max_length=8)
-    calculation: DateDifference | None = None
-    time_expression: str | None = Field(default=None, max_length=150)
+    supports: list[Support] = Field(default_factory=list, max_length=80)
+    basis: Literal["memory", "inference", "recommendation"] = "memory"
+    inputs: list[BoundInput] = Field(default_factory=list, max_length=80)
+    operation: Literal["none", "count", "sum", TemporalOperation] = "none"
+    unit: str = Field(default="", max_length=50)
+    unresolved_premise: str = Field(default="", max_length=500)
+    value: str = Field(default="")
+    request_binding: RequestBinding | None = None
+    # Executed temporal values have one owner. Retain a redundant model-written
+    # display only in the existing receipt, never in the generation schema.
+    _declared_temporal_value: str | None = PrivateAttr(default=None)
+    _unexecuted_temporal: dict | None = PrivateAttr(default=None)
+    _temporal_winner_index: int | None = PrivateAttr(default=None)
+    _temporal_display: str | None = PrivateAttr(default=None)
 
 
 class AnswerSlot(Contract):
     target: str = Field(min_length=1, max_length=500)
+    derivation: str = Field(min_length=1, max_length=1000)
     role: Literal["answer", "context"] = "answer"
     values: list[SupportedValue] = Field(default_factory=list, max_length=30)
-    missing: str = Field(default="", max_length=500)
+    missing: str = Field(default="", max_length=16000)
+    missing_kind: Literal["unspecified", "requested_part", "necessary_premise", "optional_detail"] = "unspecified"
+    coverage: Literal["complete", "partial", "unavailable"] = "complete"
 
 
 class AnswerTable(Contract):
     slots: list[AnswerSlot] = Field(min_length=1, max_length=20)
 
 
+def answer_values(slot: AnswerSlot) -> list[SupportedValue]:
+    """One publication view, shared by coverage, rendering and citations."""
+    return slot.values if slot.role == "answer" else []
+
+
+def _binding_errors(table: AnswerTable, request_contract: AnswerContract | None) -> list[str]:
+    """Check request addresses and declared execution conflicts, not free-text truth."""
+    request_ids = {output.output_id for output in request_contract.outputs} if request_contract else None
+    errors = []
+    for slot_index, slot in enumerate(table.slots, 1):
+        for value_index, item in enumerate(slot.values, 1):
+            # Existing dependency resolution already handles this value. A
+            # declared contradiction must not become a second removal path.
+            if item.unresolved_premise.strip():
+                continue
+            parent = item.request_binding
+            # A free-text answer may correctly describe a conflict or negate a
+            # premise. Its binding is auditable interpretation, not a polarity
+            # label authorizing rejection of that conclusion.
+            bindings = [(f"value {slot_index}.{value_index}", parent, None, item.operation != "none")]
+            bindings.extend(
+                (f"input {bound.identity!r} of value {slot_index}.{value_index}",
+                 bound.qualification, parent.request_id if parent else None, item.operation != "none")
+                for bound in item.inputs
+            )
+            for location, binding, inherited_id, used_as_result in bindings:
+                if binding is None:
+                    continue  # Old responses are not retrospectively disqualified.
+                request_id = binding.request_id or inherited_id
+                if request_ids is not None and request_id not in request_ids:
+                    errors.append(
+                        f"The binding of {location} names unknown request {request_id!r}. "
+                        f"Use a supplied request ID: {', '.join(sorted(request_ids))}. "
+                        "A request is a question constraint, not a fact or a source ID."
+                    )
+                selected_as_answer = slot.role == "answer" and used_as_result
+                if binding.match == "conflict" and selected_as_answer:
+                    errors.append(
+                        f"The binding of {location} explicitly declares conflict with request "
+                        f"{request_id!r}, yet uses that fact as a requested answer or executed input. "
+                        "Recheck the original question and cited fact together, including subject, "
+                        "role, relation, event and state. Correct the binding only if the original "
+                        "evidence supports it; do not merely relabel conflict as matched. "
+                        "Otherwise keep this fact only as explanatory context, exclude it from the "
+                        "computed inputs, or state the affected requested gap. Preserve independent "
+                        "supported answers. Different wording alone is not a conflict, and an "
+                        "unresolved exact detail need not prevent an approximate or conditional answer."
+                    )
+    return list(dict.fromkeys(errors))
+
+
+def binding_audit(table: AnswerTable, request_contract: AnswerContract | None = None) -> dict:
+    """Expose declared bindings and executed displays in the receipt, not a score."""
+    records = []
+    computed_temporal = []
+    not_executed_temporal = []
+    unbound_values = unbound_inputs = 0
+    for slot_index, slot in enumerate(table.slots, 1):
+        for value_index, item in enumerate(answer_values(slot), 1):
+            if item._unexecuted_temporal is not None:
+                not_executed_temporal.append({"slot": slot_index, "value": value_index,
+                                              **item._unexecuted_temporal})
+            if (item.operation in _TEMPORAL_OPERATIONS
+                    and item._declared_temporal_value is not None):
+                computed_temporal.append({
+                    "slot": slot_index, "value": value_index, "operation": item.operation,
+                    "declared": item._declared_temporal_value, "computed": item.value,
+                    **({"display": item._temporal_display} if item._temporal_display is not None else {}),
+                })
+            parent = item.request_binding
+            if parent is None:
+                unbound_values += 1
+            else:
+                records.append({"slot": slot_index, "value": value_index, "kind": "answer",
+                                **parent.model_dump(mode="json")})
+            for bound in item.inputs:
+                if bound.qualification is None:
+                    unbound_inputs += 1
+                    continue
+                record = bound.qualification.model_dump(mode="json")
+                record["request_id"] = record["request_id"] or (parent.request_id if parent else None)
+                records.append({"slot": slot_index, "value": value_index, "kind": "input",
+                                "identity": bound.identity, **record})
+    observed_ids = {record["request_id"] for record in records}
+    return {
+        "semantic_truth_verified": False,
+        "records": records,
+        "computed_temporal": computed_temporal,
+        "not_executed_temporal": not_executed_temporal,
+        "unbound_values": unbound_values,
+        "unbound_inputs": unbound_inputs,
+        "requests_without_binding": [output.output_id for output in request_contract.outputs
+                                     if output.output_id not in observed_ids] if request_contract else [],
+    }
+
+
+_DURATION_UNIT = r"(?:days?|weeks?|months?|years?|hours?|minutes?)"
+
+# A question whose reference point is the moment of asking ("how many days ago",
+# "how long ago", "how long since").  Its two endpoints are not both in the
+# evidence: one is the decision time, the other is an event date.  That makes it
+# a different answer kind from a duration, whose endpoints are both events.
+_ASKS_OFFSET = re.compile(
+    r"how\s+(?:long|many\s+" + _DURATION_UNIT + r")\b[^?.!]*?\bago\b|how\s+long\s+since\b",
+    re.IGNORECASE,
+)
+
+
 def answer_type(question: str) -> str:
     q = question.casefold()
-    if re.search(r"how (?:many|long).*?(?:weeks?|days?|years?|months?|hours?)|相隔|多久", q):
+    # The requested quantity is age; a subordinate 'when' is an event filter.
+    if re.search(r"\b(?:how old|(?:at )?what age)\b|几岁|多大年纪", q):
+        return "text"
+    # "How many days ago ..." asks for a distance from the decision time, not the
+    # length of anything measured between two events.  Typing it as a duration
+    # forced the model to drop "ago" and made every elapsed-time question
+    # unanswerable without a reference date.
+    if _ASKS_OFFSET.search(q):
+        return "offset"
+    # "How many films did I watch in the last 3 months?" counts films; the span
+    # is a filter on which films qualify, not the unit of the answer. Only a
+    # unit immediately after "how many" makes the answer itself a duration.
+    # Without this, such a question is typed `duration` and the answer is then
+    # rejected for "not expressing a duration" even though it is a valid count.
+    if re.search(rf"how many\s+(?!{_DURATION_UNIT})\w", q):
+        return "count"
+    if re.search(rf"how long\b|how many\s+{_DURATION_UNIT}\b|相隔|多久", q):
         return "duration"
     if re.search(r"\b(?:when|what year|which year|what date)\b|何时|哪年", q):
         return "date"
@@ -72,40 +234,25 @@ def answer_type(question: str) -> str:
     return "text"
 
 
-def reader_profile(question: str) -> str:
-    """Classify the requested *operation*, independently of retrieved topics.
-
-    This small deterministic profile prevents a planner's broad ``count`` or
-    ``direct`` label from changing the answer type.  It is deliberately lexical
-    and conservative: uncertain questions use the normal recall path.
-    """
-    q = re.sub(r"\s+", " ", question.casefold()).strip()
-    # A request for advice is different from recalling a past suggestion.
-    if (re.search(r"\b(?:suggest|recommend|ideas?|advice|inspiration)\b|建议|推荐|灵感", q)
-            and not re.search(r"\b(?:did|was|were|have|had|what)\b.{0,35}\b(?:recommend|suggest|say)\b", q)):
-        return "recommendation"
-    if re.match(r"^(?:which|who)\b", q) and re.search(
-            r"\b(?:most|least|fewest|highest|lowest|best|worst|最多|最少|最高|最低)\b", q):
-        return "entity_selection"
-    if re.match(r"^(?:which|who)\b", q):
-        return "recall"
-    if re.search(r"\b(?:how many|how much|how long|number of)\b|多少|多久|几", q):
-        # Comparisons and before/after questions genuinely require multiple
-        # values and must not be collapsed into one scalar.
-        if re.search(r"\b(?:before|after|between|each person|each subject|per person|respectively)\b|之前|之后|分别", q):
-            return "recall"
-        return "single_quantity"
-    if re.search(r"\b(?:what did .* recommend|what .* suggested|what advice .* gave)\b", q):
-        return "recall"
-    return "recall"
-
-
 _QUOTE_SPEAKER = re.compile(r"^\s*([A-Za-z][\w'-]{0,38}):\s*")
+
+# Markdown emphasis and inline-code markers. These are presentation, so a quote
+# that drops them still names the same words -- exactly the formatting-versus-
+# provenance distinction _canonical_quote already draws for case and width.
+# Measured (2026-11-13): 17 of the 18 recorded exact-quote failures were this
+# mismatch alone, e.g. the event holds "**Store Utensils by Task:**" while the
+# model cited "Store Utensils by Task:"; each rejection killed a whole answer.
+# Deliberately narrow: '#' is NOT stripped because it is meaningful in the
+# evidence (hashtag names such as #PlankChallenge), and stripping it would let a
+# quote match a different token.
+_MARKDOWN_EMPHASIS = re.compile(r"[*_`]")
 
 
 def _canonical_quote(text: str) -> str:
-    """Case, width and whitespace are formatting; provenance is not."""
-    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+    """Case, width, whitespace and inline emphasis are formatting; provenance is not."""
+    normalized = unicodedata.normalize("NFKC", text)
+    normalized = _MARKDOWN_EMPHASIS.sub("", normalized)
+    return " ".join(normalized.casefold().split())
 
 
 def quote_matches(quote: str, text: str) -> bool:
@@ -146,15 +293,273 @@ def quote_matches(quote: str, text: str) -> bool:
     return body in canonical_text
 
 
-def validate_table(table: AnswerTable, sources: list[Hit], targets: list[str], kind: str) -> None:
+def _assertion_grade(event: dict) -> str:
+    """What a matched source event can support.
+
+    ``none``      the event asserts nothing (a question);
+    ``primary``   a first-hand statement (a user turn);
+    ``secondary`` a second-hand statement (an assistant turn).
+
+    Legitimacy of support is not the same question as who spoke. A question
+    can never establish a fact, while an assistant turn does assert something
+    the conversation contains -- so it may support an answer, but it ranks
+    below first-hand evidence. Records written before the field existed are
+    mapped from the legacy ``context_only`` flag.
+    """
+    grade = event.get("evidence_grade")
+    if grade in {"primary", "secondary", "none"}:
+        return str(grade)
+    if event.get("context_only"):
+        return "secondary" if event.get("role") == "assistant" else "none"
+    return "primary" if event.get("role") == "user" else "secondary"
+
+
+def _quote_spans(quote: str, text: str) -> list[tuple[int, int]]:
+    """Map existing format-equivalent quote matches to original characters."""
+    if quote in text:
+        return [(m.start(), m.end()) for m in re.finditer(re.escape(quote), text)]
+    folded, starts, ends = [], [], []
+    index = 0
+    while index < len(text):
+        end = index + 1
+        # Keep composition clusters together, including combining marks and
+        # Hangul; compatibility characters and casefold expansions retain their
+        # original extent. Newlines are only collapsed for searching, never for
+        # determining clause boundaries.
+        while end < len(text) and (unicodedata.combining(text[end]) or
+                unicodedata.normalize("NFKC", text[index:end + 1]) !=
+                unicodedata.normalize("NFKC", text[index:end]) + unicodedata.normalize("NFKC", text[end])):
+            end += 1
+        for char in unicodedata.normalize("NFKC", text[index:end]):
+            if _MARKDOWN_EMPHASIS.fullmatch(char):
+                continue
+            for unit in char.casefold():
+                unit = " " if unit.isspace() else unit
+                if unit == " " and folded and folded[-1] == " ":
+                    ends[-1] = end
+                    continue
+                folded.append(unit)
+                starts.append(index)
+                ends.append(end)
+        index = end
+    normalized = "".join(folded)
+    body = _canonical_quote(quote)
+    if body not in normalized and (speaker := _QUOTE_SPEAKER.match(body)):
+        body = body[speaker.end():]
+    if not body:
+        return []
+    return [(starts[m.start()], ends[m.end() - 1]) for m in re.finditer(re.escape(body), normalized)]
+
+
+def _support_is_assertion(event: dict, quote: str, *, label_predicate: str = "", label_value: str = "") -> bool:
+    """Check this quote's original scope, independently of speaker authority.
+
+    Hydration refreshes the event grade from the original source. Older caller
+    records still retain their explicit grade; a positive grade cannot license
+    an interrogative or a cropped conditional in a different part of the turn.
+    Formatting equivalents already accepted by quote_matches remain accepted.
+    """
+    if not quote_matches(quote, event["text"]):
+        return False
+    if label_predicate and listed_label_supported(event["text"], quote, label_predicate, label_value):
+        return True
+    if _assertion_grade(event) == "none":
+        return False
+    scopes = event.get("assertion_scopes")
+    if scopes is None:
+        scopes = source_assertion_scopes(event["text"])
+    spans = _quote_spans(quote, event["text"])
+    return bool(spans) and all(assertion_span_supported(scopes, left, right) for left, right in spans)
+
+
+_HANDLE = re.compile(r"(?<![\w@])@[A-Za-z0-9_]+(?:[.\-][A-Za-z0-9_]+)*")
+_IDENTIFIER_ESCAPE = re.compile(r"\\([_@.\-])")
+
+
+def _identifier_text(text: str) -> str:
+    # Unlike quote matching, identifiers retain underscores and letter case.
+    # Only Markdown escaping and presentation markers are removed.
+    text = _IDENTIFIER_ESCAPE.sub(r"\1", unicodedata.normalize("NFKC", text))
+    return text.replace("`", "").replace("*", "")
+
+
+def _has_handle(text: str, handle: str) -> bool:
+    # Sources may omit the display '@'. Never accept a prefix or fuzzy match.
+    return re.search(r"(?<![\w@.\-])@?" + re.escape(handle[1:]) + r"(?!\w|[.\-][A-Za-z0-9_])",
+                     _identifier_text(text)) is not None
+
+
+def _bind_unique_quote_sources(table: AnswerTable, sources: list[Hit]) -> None:
+    """Correct a wrong source number only for one literal source-text match.
+
+    Valid bindings keep their original provenance, including formatting-only
+    matches. Ambiguous or absent quotes remain errors for the existing validator.
+    This resolves an address; it does not establish what the quoted words entail.
+    """
+    for slot in table.slots:
+        for item in slot.values:
+            references = [*item.supports, *(ref for bound in item.inputs for ref in bound.supports)]
+            for support in references:
+                if not 1 <= support.source_id <= len(sources):
+                    continue
+                if any(
+                    quote_matches(support.quote, event["text"])
+                    for event in sources[support.source_id - 1].metadata.get("source_events", [])
+                ):
+                    continue
+                matches = [index for index, source in enumerate(sources, 1) if any(
+                    support.quote in event["text"] for event in source.metadata.get("source_events", [])
+                )]
+                if len(matches) == 1:
+                    support.source_id = matches[0]
+
+
+def validate_table(
+    table: AnswerTable,
+    sources: list[Hit],
+    targets: list[str],
+    kind: str,
+    derivations: list[dict] | None = None,
+    as_of: str | None = None,
+    request_contract: AnswerContract | None = None,
+) -> None:
+    """Resolve explicit dependencies, validate sources, execute declared arithmetic.
+
+    Semantic selection stays with the model. Only explicitly declared inputs
+    authorize computation; no quantities, event dates or premises are guessed.
+    """
     if [slot.target for slot in table.slots] != targets:
         raise ValueError("Return every requested target exactly once and in order")
+    if binding_errors := _binding_errors(table, request_contract):
+        raise ValueError("\n".join(binding_errors))
+    # Representation limits may retain an already supplied ordinary inference.
+    # Invalid concrete bindings must instead use the existing model repair: a
+    # nonempty answer is not permission to ignore malformed selected inputs.
+    computed_temporal = {}
     for slot in table.slots:
-        if not slot.values and not slot.missing:
-            raise ValueError("An empty target requires an explicit missing-evidence reason")
         for item in slot.values:
-            dates = set()
-            factual_support = False
+            item._temporal_winner_index = None
+            item._temporal_display = None
+            if (item.operation not in _TEMPORAL_OPERATIONS
+                    or item.unresolved_premise.strip()):
+                continue
+            try:
+                if any(bound.time_ref is not None and not 1 <= bound.time_ref.source_id <= len(sources)
+                       for bound in item.inputs):
+                    raise _InvalidTimeSource("Unknown time_ref source number")
+                computed_temporal[id(item)] = _computed_value(item, sources, as_of)
+                item._unexecuted_temporal = None
+            except _UnparsedTimeReference as error:
+                raise _UnparsedTimeReference(
+                    f"Invalid temporal binding: {error}. The source event exists, but it supplies "
+                    "no parsed time references, so the selected reference cannot be used for "
+                    "computation. This parser representation gap is not itself a missing fact. "
+                    "Reassess the original quote and its source context at their supported precision. "
+                    "If they support an ordinary contextual or qualified answer, use operation=none, "
+                    "remove the unavailable time_ref, and write that answer explicitly in value "
+                    "with the real source quotes. Do not invent a reference or equate an utterance "
+                    "date with an event date without contextual support. If a qualified answer "
+                    "leaves requested exactness unresolved, retain it with coverage=partial and "
+                    "missing_kind=requested_part naming that unresolved part. Use necessary_premise "
+                    "only when a fact indispensable to that answer is actually missing, not merely "
+                    "because the parser cannot compute it."
+                ) from error
+            except _InvalidTemporalBinding as error:
+                raise _InvalidTemporalBinding(
+                    f"Invalid temporal binding: {error}. Repair the selected inputs and their "
+                    "source-event/time-reference addresses using the supplied evidence. Select "
+                    "the event relation or phase requested by the question consistently for each "
+                    "compared entity; ordering, receiving and completing are different events. "
+                    "Do not keep an unexecuted comparison as though it were computed. This binding "
+                    "error does not itself establish missing evidence. Do not change operation to "
+                    "none merely to bypass a bad address or wrong input count. If the original evidence "
+                    "supports only a qualified or contextual answer, explicitly use operation=none "
+                    "with that answer and its real quotes; do not invent a reference or event date."
+                ) from error
+            except _UnexecutableTimeAnnotation as error:
+                if not item.value.strip():
+                    # No answer exists to return to. Use the existing repair,
+                    # explaining the representation limit without declaring a
+                    # source-evidence gap or fabricating a conclusion ourselves.
+                    raise ValueError(
+                        f"Time annotation cannot execute: {error}. This does not by itself mean "
+                        "the original evidence is insufficient. If your cited original evidence "
+                        "supports a qualified or contextual inference, use operation=none and "
+                        "write that conclusion explicitly in value, keeping the real source quotes. "
+                        "Do not invent a parser reference or a source endpoint. If an indispensable "
+                        "fact is truly missing, state that gap instead of inventing an answer."
+                    ) from error
+                item._unexecuted_temporal = {
+                    "requested_operation": item.operation, "not_executed": True,
+                    "error": str(error), "declared_value": item.value,
+                }
+                item.operation = "none"
+    _bind_unique_quote_sources(table, sources)
+    for slot in table.slots:
+        answers = answer_values(slot)
+        blocked = [item.unresolved_premise.strip() for item in answers if item.unresolved_premise.strip()]
+        if (slot.missing_kind == "necessary_premise" and slot.missing.strip()
+                and answers and not blocked):
+            raise ValueError(
+                "The table labels a missing detail as necessary while publishing an answer. Reassess "
+                "whether that detail is indispensable for the original question and its requested "
+                "precision; the label itself does not establish necessity. A missing exact "
+                "detail need not block a source-supported approximate or conditional answer. If that "
+                "answer leaves a requested exact result unknown, keep the qualified answer and name "
+                "that unmet request in missing with missing_kind=requested_part and coverage=partial. "
+                "Use optional_detail or remove the gap only when it is not required by the question. "
+                "Do not substitute a different person, event, relation "
+                "or aggregation member for a genuinely missing input. "
+                "A necessary missing premise must be linked to its dependent value via unresolved_premise; "
+                "omit only that value and retain independent answers. If the gap is an independently "
+                "unanswered requested part, use missing_kind=requested_part instead. "
+                "Do not publish a value while declaring its indispensable premise unsupported."
+            )
+        slot.values = [item for item in slot.values if not item.unresolved_premise.strip()]
+        answers = answer_values(slot)
+        if blocked:
+            slot.missing = "; ".join(dict.fromkeys([slot.missing, *blocked])).strip("; ")
+            # Remaining values are independent. The removed dependent answer is
+            # now an unanswered part, not a missing premise of those values.
+            slot.missing_kind = "requested_part" if answers else "necessary_premise"
+            slot.coverage = "partial" if answers else "unavailable"
+        if slot.role == "answer" and not answers and slot.missing.strip():
+            # No published value plus an explicit gap already determines this state.
+            slot.coverage = "unavailable"
+        if slot.role == "answer" and not answers and not slot.missing.strip():
+            raise ValueError("An empty target requires an explicit missing-evidence reason")
+        if slot.role == "answer" and slot.coverage in {"complete", "partial"} and not answers:
+            raise ValueError(
+                "Complete or partial coverage requires a supported answer value; "
+                "use unavailable when no answer is supported"
+            )
+        if slot.coverage == "partial" and not slot.missing:
+            raise ValueError("Partial coverage requires naming the unmet condition")
+        if slot.coverage == "unavailable" and answers:
+            raise ValueError(
+                "Coverage representation conflict: unavailable cannot contain published answer values. "
+                "Reassess the existing values and their quotes: a supported negative answer, partial answer, "
+                "or qualified inference is not the same as no supported answer. Preserve independently "
+                "supported information and citations; repair only the conflicting representation. "
+                "Do not clear all values merely to pass validation or mark coverage complete without support. "
+                "Use unavailable only when no answer is supported; otherwise state any unresolved requested part."
+            )
+        slot_has_user_assertion = False
+        for item in slot.values:
+            if item.operation == "none" and not item.value.strip():
+                raise ValueError("A direct answer requires a value; use unavailable for missing evidence")
+            # Input quotes use the same source IDs as ordinary answers. Assemble
+            # only quotes explicitly chosen by the model; never add a source.
+            references = {(ref.source_id, ref.quote): ref for ref in item.supports}
+            for bound in item.inputs:
+                references.update({(ref.source_id, ref.quote): ref for ref in bound.supports})
+            item.supports = list(references.values())
+            if not item.supports and item.basis != "recommendation":
+                raise ValueError("An answer requires original source supports")
+            assertions = []
+            handles = (set(_HANDLE.findall(_identifier_text(item.value)))
+                       if item.basis in {"memory", "inference"} and item.operation == "none" else set())
+            supported_handles = set()
             for support in item.supports:
                 if support.source_id > len(sources):
                     raise ValueError("Unknown source number")
@@ -162,142 +567,435 @@ def validate_table(table: AnswerTable, sources: list[Hit], targets: list[str], k
                 matched = [e for e in events if quote_matches(support.quote, e["text"])]
                 if not matched:
                     raise ValueError(f"Source {support.source_id} does not contain exact quote: {support.quote!r}")
-                factual_support |= any(not e.get("context_only") for e in matched)
-                for event in matched:
-                    if event.get("context_only"):
-                        continue
-                    dates.add(str(event.get("occurred_at", ""))[:10])
-                    dates.update(re.findall(r"\b\d{4}-\d{2}-\d{2}\b", event["text"]))
-                    for derivation in event.get("time_derivations", []):
-                        # An interval boundary is not a known exact event date.
-                        if derivation["precision"] == "day":
-                            dates.add(derivation["start"])
-            if not factual_support:
-                raise ValueError("A question/context alone cannot establish a fact; cite at least one original factual utterance")
-            if kind == "date" and slot.role == "answer":
-                # Both answer paths resolve the cited expression from its source
-                # anchor before inspecting a model-proposed calculation. Never
-                # swap arithmetic endpoints or infer a date from the answer text.
-                resolved = _source_time(item, sources)
-                if resolved is not None:
-                    item.value = resolved
-                    item.calculation = None
-                    continue
-            if item.calculation:
-                calc = item.calculation
-                if kind == "date" and calc.unit == "years" and slot.role == "answer":
-                    # Inverse duration: only the resulting year is warranted,
-                    # not an invented exact day/month for the start event.
-                    numbers = {word: n for n, word in enumerate(
-                        ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"))}
-                    durations = {int(raw) if raw.isdigit() else numbers[raw.casefold()]
-                                 for ref in item.supports
-                                 for raw in re.findall(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten) years?\b", ref.quote, re.IGNORECASE)}
-                    if calc.end.isoformat() not in dates or calc.end.year-calc.start.year not in durations:
-                        raise ValueError("Start-year derivation requires an anchored end date and quoted year duration")
-                    item.value = str(calc.start.year)
-                    # Do not publish manufactured month/day as a proven event date.
-                    item.calculation = None
-                    continue
-                if kind != "duration" or slot.role != "answer":
-                    raise ValueError("Date difference only answers a duration query")
-                if not {item.calculation.start.isoformat(), item.calculation.end.isoformat()} <= dates:
-                    raise ValueError("Calculation endpoints need exact source-bound dates. For approximate year/week precision, set calculation=null and answer the supported relative duration, without invented endpoints.")
-                item.value = item.calculation.value()
-            if slot.role == "answer" and kind == "duration" and not re.search(r"\b(?:days?|weeks?|months?|years?|hours?|minutes?)\b|天|周|月|年", item.value, re.IGNORECASE):
-                raise ValueError("Duration answers must express a duration, not an event name")
-            if slot.role == "answer" and kind == "count" and not re.search(r"\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|none)\b", item.value, re.IGNORECASE):
-                raise ValueError("Count answers must contain a number or a supported bound")
+                assertions.extend(e for e in matched if _support_is_assertion(
+                    e, support.quote, label_predicate=slot.target, label_value=item.value))
+                supported_handles.update(
+                    handle for handle in handles if _has_handle(support.quote, handle)
+                    and any(_support_is_assertion(e, support.quote) and _has_handle(e["text"], handle) for e in matched)
+                )
+            if not assertions and item.basis != "recommendation":
+                raise ValueError(
+                    "A question alone cannot establish a fact; cite at least one original assertion"
+                )
+            if item.operation != "none":
+                # Executed operands each need an assertion. With no operation,
+                # input grouping does not change the ordinary support contract.
+                for bound in item.inputs:
+                    if not any(
+                        _support_is_assertion(event, ref.quote)
+                        for ref in bound.supports
+                        for event in sources[ref.source_id - 1].metadata.get("source_events", [])
+                    ):
+                        raise ValueError("Each bound input needs an assertion, not only a question")
+                computed = (computed_temporal[id(item)] if id(item) in computed_temporal
+                            else _computed_value(item, sources, as_of))
+                if mismatch := _operation_value_mismatch(item, computed):
+                    raise ValueError(mismatch)
+                if (item.operation in _TEMPORAL_OPERATIONS
+                        and item._declared_temporal_value is None):
+                    item._declared_temporal_value = item.value
+                item.value = computed
+                item._temporal_display = _temporal_subject_display(item, request_contract)
+            if handles - supported_handles:
+                cited_spellings = set()
+                for support in item.supports:
+                    events = sources[support.source_id - 1].metadata.get("source_events", [])
+                    for event in events:
+                        if not _support_is_assertion(event, support.quote):
+                            continue
+                        for original in _HANDLE.findall(_identifier_text(event["text"])):
+                            if _has_handle(support.quote, original):
+                                cited_spellings.add((support.source_id, original))
+                evidence = "; ".join(f"source {sid}: {value}" for sid, value in sorted(cited_spellings))
+                raise ValueError(
+                    "Recalled @ identifiers must match the cited original spelling exactly. "
+                    "Unsupported values: " + ", ".join(sorted(handles - supported_handles))
+                    + ". Exact spellings in your cited original evidence: "
+                    + (evidence or "none; provide a quote containing the original identifier")
+                    + ". Select only the identity supported for this question; these are not automatic replacements."
+                )
+            if item in answers:
+                slot_has_user_assertion = slot_has_user_assertion or any(e.get("role") == "user" for e in assertions)
+        # Several suggestions for one target may share a cited personal
+        # constraint. Each value still has its own valid assertion support.
+        if any(item.basis == "recommendation" for item in answers) and not slot_has_user_assertion:
+            eligible = [str(index) for index, source in enumerate(sources, 1)
+                        if any(event.get("role") == "user" and _assertion_grade(event) == "primary"
+                               for event in source.metadata.get("source_events", []))]
+            guidance = (
+                " Sources containing eligible user assertions: " + ", ".join(eligible)
+                + ". Cite a relevant exact user premise from these sources in this target, alongside any "
+                "suggestion evidence. Their presence does not prove relevance; do not invent a personal fact."
+                if eligible else
+                " No eligible user assertions are present in the supplied sources; do not invent a personal fact."
+            )
+            raise ValueError("Personalized recommendations require a quoted user assertion in the same target."
+                             + guidance)
+
+
+_CURRENCY_ALIASES = {
+    "usd": {"usd", "us dollar", "us dollars", "u.s. dollar", "u.s. dollars", "us$", "$"},
+    "eur": {"eur", "euro", "euros", "€"},
+    "gbp": {"gbp", "pound sterling", "pounds sterling", "£"},
+    "cny": {"cny", "rmb", "yuan", "cn¥", "¥", "￥"},
+    "jpy": {"jpy", "yen", "jp¥", "¥", "￥"},
+    "cad": {"cad", "canadian dollar", "canadian dollars", "ca$", "c$", "$"},
+    "aud": {"aud", "australian dollar", "australian dollars", "au$", "a$", "$"},
+}
+
+
+def _same_scalar_display(declared: str, computed_number: str, unit: str) -> bool:
+    """Compare one exact scalar in its declared unit, without unit conversion.
+
+    Formatting is not a second arithmetic owner. Currency symbols are resolved
+    only from the explicit unit, never inferred from a bare number or a question.
+    Ranges, prose, approximations and conflicting units are not scalar displays.
+    """
+    text = declared.strip().casefold()
+    normalized_unit = unit.strip().casefold()
+    aliases = {normalized_unit} if normalized_unit else set()
+    if normalized_unit in {"$", "dollar", "dollars"}:
+        aliases.update({"$", "dollar", "dollars"})
+    # An ambiguous symbol/name as the declared unit does not establish an ISO code.
+    for group in _CURRENCY_ALIASES.values():
+        if normalized_unit not in {"$", "dollar", "dollars", "¥", "￥"} and normalized_unit in group:
+            aliases.update(group)
+            if "$" in group:
+                aliases.update({"dollar", "dollars"})
+    displays = {text}
+    for alias in sorted(aliases, key=len, reverse=True):
+        if text.startswith(alias):
+            displays.add(text[len(alias):].strip())
+        if text.endswith(alias):
+            displays.add(text[:-len(alias)].strip())
+    scalar = r"[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?"
+    return any(re.fullmatch(scalar, value) and Decimal(value.replace(",", "")) == Decimal(computed_number)
+               for value in displays)
+
+
+def _operation_value_mismatch(item: SupportedValue, computed: str) -> str | None:
+    """One scalar owner; a separately declared unit need not be repeated in value."""
+    if item.operation in _TEMPORAL_OPERATIONS:
+        # The original time bindings authorize calculation, not an additional
+        # model-authored rendering. Requiring two displays to match creates a
+        # second numeric owner and can reject valid approximate wording.
+        return None
+    equivalent = {computed}
+    if unit := item.unit.strip():
+        equivalent.add(computed.removesuffix(" " + unit))
+    if item.value.strip() and item.value.strip() not in equivalent and not _same_scalar_display(
+        item.value, computed.removesuffix(" " + item.unit.strip()) if item.unit.strip() else computed,
+        item.unit,
+    ):
+        return (
+            f"Declared operation={item.operation!r} computes {computed!r} from the selected inputs, "
+            f"but the provided value is {item.value.strip()!r}. "
+            "Count is the cardinality of distinct input identities: each identity must be one "
+            "requested counted member, not a premise, endpoint or interval from which members "
+            "still need to be derived. Sum adds the selected explicit amounts. Reconsider the "
+            "operation and qualifying inputs against the original target; do not merely erase "
+            "the provided value to silence this mismatch. Leave value empty only when that "
+            "computed result is intended. Use operation=none for a supported derivation outside "
+            "these operations or to preserve a qualified, approximate or conditional answer."
+        )
+    return None
+
+
+def validation_feedback(
+    table: AnswerTable, primary_error: ValueError, request_contract: AnswerContract | None = None,
+    *, sources: list[Hit] | None = None, as_of: str | None = None,
+) -> str:
+    """Add only already-defined, independently computable conflicts after a failure.
+
+    This does not revalidate provenance, select operands, mutate the table, or
+    authorize an answer. Uncomputable or omitted values cannot supply diagnostics.
+    """
+    errors = [str(primary_error)]
+    errors.extend(error for error in _binding_errors(table, request_contract) if error not in str(primary_error))
+    for slot in table.slots:
+        for item in slot.values:
+            if item.operation == "none" or item.unresolved_premise.strip():
+                continue
+            try:
+                computed = _computed_value(item, sources, as_of)
+            except ValueError:
+                # Unknown amounts, empty inputs and conflicting identities need
+                # their own existing validation, not a guessed computed scalar.
+                continue
+            mismatch = _operation_value_mismatch(item, computed)
+            if mismatch and mismatch not in errors:
+                errors.append(mismatch)
+    return "\n".join(errors)
+
+
+class _InvalidTemporalBinding(ValueError):
+    """A declared operation has invalid operands, concrete addresses or provenance."""
+
+
+class _InvalidTimeSource(_InvalidTemporalBinding):
+    """A nonexistent source is not an unrepresentable time annotation."""
+
+
+class _UnparsedTimeReference(_InvalidTemporalBinding):
+    """A concrete reference is invalid because the selected event has no parsed refs."""
+
+
+class _UnexecutableTimeAnnotation(ValueError):
+    """An optional annotation cannot express otherwise ordinary sourced reasoning."""
+
+
+def _bound_time_interval(bound: BoundInput, sources: list[Hit]) -> tuple[date, date]:
+    """Resolve exactly the selected source mention; never infer an event date."""
+    selection = bound.time_ref
+    if selection is None:
+        raise _UnexecutableTimeAnnotation(
+            "Each temporal input needs an explicit time_ref; use operation=none for other reasoning")
+    if selection.source_id > len(sources):
+        raise _InvalidTimeSource("Unknown time_ref source number")
+    events = sources[selection.source_id - 1].metadata.get("source_events", [])
+    if selection.source_event > len(events):
+        raise _InvalidTemporalBinding("Unknown time_ref source_event position")
+    event = events[selection.source_event - 1]
+    refs = resolve_time_references(event["text"], source_time=event.get("occurred_at"))
+    if not refs:
+        # Still reject every nonexistent concrete address, including index 1.
+        # Only the repair guidance differs: a parser gap is not an evidence gap.
+        raise _UnparsedTimeReference(
+            "Unknown time_ref reference position; the selected source event has no parsed time references")
+    if selection.reference > len(refs):
+        raise _InvalidTemporalBinding(
+            "Unknown time_ref reference position; use only references supplied for that source event")
+    reference = refs[selection.reference - 1]
+    if _assertion_grade(event) == "none" or not any(
+        support.source_id == selection.source_id and quote_matches(support.quote, event["text"])
+        and quote_matches(reference.expression, support.quote)
+        for support in bound.supports
+    ):
+        raise _InvalidTemporalBinding(
+            "A time_ref needs an assertion quote from the selected source event containing its time expression")
+    if reference.start is None or reference.end_exclusive is None:
+        raise _UnexecutableTimeAnnotation(
+            "This time reference has no bounded interval. Preserve its approximate or conditional meaning "
+            "with operation=none; do not replace it with the utterance date or zero."
+        )
+    start, end = date.fromisoformat(reference.start), date.fromisoformat(reference.end_exclusive)
+    if end <= start:
+        raise _InvalidTemporalBinding("A time reference must have an ordered nonempty interval")
+    return start, end
+
+
+def _computed_time_value(
+    item: SupportedValue, sources: list[Hit] | None, as_of: str | None = None,
+) -> str:
+    """Small, declared interval algebra over already parsed source references."""
+    if sources is None:
+        raise _InvalidTemporalBinding("Temporal computation requires the original source events")
+    if item.operation == "time_since":
+        if len(item.inputs) != 1:
+            raise _InvalidTemporalBinding(
+                "time_since needs exactly one source input; its endpoint is the supplied question clock")
+    elif len(item.inputs) != 2:
+        raise _InvalidTemporalBinding(
+            "A temporal operation needs exactly two selected inputs in the requested order")
+    intervals = []
+    representation_error = None
+    for bound in item.inputs:
+        try:
+            intervals.append(_bound_time_interval(bound, sources))
+        except _UnexecutableTimeAnnotation as error:
+            # A missing/approximate first annotation must not hide an invalid
+            # concrete address or quote in a later selected operand.
+            representation_error = representation_error or error
+    if representation_error is not None:
+        raise representation_error
+    left = intervals[0]
+    if item.operation == "time_since":
+        # This is an explicitly supplied question clock, never a fabricated
+        # second source event or a fallback for a missing source-event clock.
+        anchors = resolve_time_references("", question_time=as_of, clock="question", include_utterance=True)
+        if not anchors:
+            raise _UnexecutableTimeAnnotation(
+                "time_since needs a supplied question date; do not invent a source endpoint or current clock")
+        right = (date.fromisoformat(anchors[0].start), date.fromisoformat(anchors[0].end_exclusive))
+    else:
+        right = intervals[1]
+    if item.operation in {"time_compare", "time_earlier", "time_later"}:
+        first, second = (bound.identity.strip() for bound in item.inputs)
+        if not first or not second:
+            raise _InvalidTemporalBinding("Temporal input identities cannot be whitespace")
+        if left[1] <= right[0]:
+            earlier, later, relation = first, second, "before"
+            earlier_index, later_index = 0, 1
+        elif right[1] <= left[0]:
+            earlier, later, relation = second, first, "after"
+            earlier_index, later_index = 1, 0
+        elif left == right and left[1] - left[0] == timedelta(days=1):
+            return f"{first} and {second} occurred on the same day; their order within that day is unknown"
+        else:
+            return f"The supported time ranges for {first} and {second} overlap; their order is not determined"
+        if item.operation == "time_earlier":
+            item._temporal_winner_index = earlier_index
+            return earlier
+        if item.operation == "time_later":
+            item._temporal_winner_index = later_index
+            return later
+        return f"{first} occurred {relation} {second}"
+    # Date intervals contain calendar days and use half-open boundaries. Do not
+    # turn a week/month range into a fabricated point or discard a negative sign.
+    minimum = (right[0] - (left[1] - timedelta(days=1))).days
+    maximum = ((right[1] - timedelta(days=1)) - left[0]).days
+    unit = (item.unit.strip().casefold() or "days").removesuffix("s") + "s"
+    if unit not in {"days", "weeks", "months", "years"}:
+        raise _UnexecutableTimeAnnotation(
+            "Time difference supports days/weeks/months/years; use operation=none for other interpretations")
+    result = None
+    if minimum == maximum:
+        # Reuse the existing calendar algebra. It accepts ordered endpoints;
+        # restore the declared direction explicitly instead of swallowing it.
+        negative = right[0] < left[0]
+        start, end = (right[0], left[0]) if negative else (left[0], right[0])
+        try:
+            result = ("-" if negative else "") + calendar_difference(start, end, unit)
+        except ValueError:
+            # Inexact calendar months/years/weeks retain their precise day
+            # difference. An unavailable exact unit is not an unavailable date.
+            pass
+    if result is None:
+        if unit == "weeks" and minimum % 7 == maximum % 7 == 0:
+            lower, upper, shown_unit = minimum // 7, maximum // 7, "weeks"
+        else:
+            lower, upper, shown_unit = minimum, maximum, "days"
+        number = str(lower) if lower == upper else f"{lower} to {upper}"
+        result = f"{number} {shown_unit}"
+    number, shown_unit = result.rsplit(" ", 1)
+    if number in {"1", "-1"}:
+        result = f"{number} {shown_unit.removesuffix('s')}"
+    if item.operation == "time_since":
+        result += " ago"
+        if maximum < 0:
+            result += " (the event is after the question date)"
+        elif minimum < 0:
+            result += " (the supported range crosses the question date)"
+    return result
+
+
+def _computed_value(
+    item: SupportedValue, sources: list[Hit] | None = None, as_of: str | None = None,
+) -> str:
+    """One output owner for explicitly selected, sourced arithmetic inputs."""
+    if item.operation in _TEMPORAL_OPERATIONS:
+        return _computed_time_value(item, sources, as_of)
+    if not item.inputs:
+        raise ValueError("Count/sum needs selected inputs; directly stated totals may use operation=none")
+    distinct = {}
+    for bound in item.inputs:
+        key = " ".join(bound.identity.casefold().split())
+        if not key:
+            raise ValueError("Input identity cannot be whitespace")
+        amount = Decimal(bound.amount) if bound.amount is not None else None
+        if item.operation == "sum" and amount is None:
+            raise ValueError("Sum requires an explicit amount for every input; unknown is not zero")
+        if key in distinct and item.operation == "sum" and distinct[key] != amount:
+            raise ValueError("One input identity has conflicting amounts; resolve its evidence first")
+        distinct[key] = amount
+    with localcontext() as context:
+        context.prec = 128  # At most 80 operands, each bounded to 60 decimal characters.
+        total = Decimal(len(distinct)) if item.operation == "count" else sum(distinct.values(), Decimal(0))
+    number = format(total, "f")
+    if "." in number:
+        number = number.rstrip("0").rstrip(".")
+    return " ".join(part for part in (number, item.unit.strip()) if part)
 
 
 _MONTH_NAMES = (
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
 )
-_NUMBER_WORDS = {
-    0: "zero", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five",
-    6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
-    11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen",
-    16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty",
-}
 _ISO_DATE = re.compile(r"(?<![\d(])(\d{4})-(\d{2})-(\d{2})(?![\d)])")
-_LOWER_BOUND = re.compile(r"\bat\s+least\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b", re.IGNORECASE)
-# A question that opens with an auxiliary can only be answered by the polarity
-# itself.  The obligation is one token; anything appended is a justification the
-# evaluator has never asked for, and every extra token is pure precision loss.
-_POLAR_QUESTION = re.compile(
-    r"^(?:does|do|did|is|are|was|were|has|have|had|can|could|will|would|should|am)\b", re.IGNORECASE
-)
-_POLAR_LEAD = re.compile(r"^(yes|no)\s*(?:,|;|:|-|—|\.|\)|$)", re.IGNORECASE)
-_HOW_MANY = re.compile(r"how\s+many\s+([a-z][a-z' -]{1,40}?)\s*(?:\b(?:does|do|did|is|are|has|have|will|would|can|could)\b|$|[?.!,])", re.IGNORECASE)
 
 
 def _month_phrase(match: re.Match[str]) -> str:
-    """Rewrite an ISO date as the written form, without repeating the ISO text.
-
-    Keeping ``(2023-01-29)`` in the answer costs precision against a gold answer
-    written as ``29 January, 2023``: measured 1.00 -> 0.86 on the one question
-    that triggered it. The machine-readable value is already in the answer
-    table, so nothing is lost by not repeating it in prose.
-    """
+    """Display an explicit ISO date without changing the surrounding answer."""
     year, month, day = match.group(1), int(match.group(2)), int(match.group(3))
     if not 1 <= month <= 12 or not 1 <= day <= 31:
         return match.group(0)
     return f"{day} {_MONTH_NAMES[month - 1]} {year}"
 
 
-def _counted_noun(question: str) -> str:
-    """The noun a 'how many' question counts, used to restate a lower bound."""
-    match = _HOW_MANY.search(question)
-    if match is None:
-        return ""
-    phrase = match.group(1).strip(" -")
-    if not phrase or phrase.split()[0] in {"of", "the", "a", "an"}:
-        return ""
-    return phrase
-
-
 def normalize_answer_text(text: str, question: str = "") -> str:
-    """Render one fact in both surface forms an exact-match evaluator accepts.
+    """Display explicit ISO dates while preserving all answer content."""
+    return _ISO_DATE.sub(_month_phrase, text.strip())
 
-    This is output canonicalisation, not extra knowledge: the same fact is
-    written twice. Motivating failures were purely lexical -- ``2023-01-29``
-    against gold ``29 January, 2023`` scores 0, and ``at least 3`` against
-    ``Three dogs`` scores 0, although both answers are correct. The abstracted
-    memory path loses the surface anchor that a verbatim restatement keeps, so
-    the renderer restores it. Idempotent: a value already carrying both forms
-    is returned unchanged.
+
+def _label_present(label: str, text: str) -> bool:
+    """Literal label matching, with boundaries for Latin words and digits."""
+    label, text = _canonical_quote(label), _canonical_quote(text)
+    if not label:
+        return False
+    left = r"(?<![a-z0-9_])" if re.match(r"[a-z0-9_]", label) else ""
+    right = r"(?![a-z0-9_])" if re.search(r"[a-z0-9_]$", label) else ""
+    return bool(re.search(left + re.escape(label) + right, text))
+
+
+def _temporal_subject_display(item: SupportedValue, contract: AnswerContract | None) -> str | None:
+    """Display an executed winner's requested name, without changing its identity.
+
+    The selected operands must name distinct question subjects, and the winning
+    subject must occur in its own quote. Same-subject phases and ambiguous or
+    missing bindings retain their full computed identity. A model's redundant
+    declared answer is never consulted here.
     """
-    value = text.strip()
-    if not value:
+    winner = item._temporal_winner_index
+    if (winner is None or contract is None or item.request_binding is None
+            or item.operation not in {"time_earlier", "time_later"}):
+        return None
+    output = next((o for o in contract.outputs if o.output_id == item.request_binding.request_id), None)
+    if output is None or output.operator != "comparison" or len(output.subjects) < 2:
+        return None
+    subjects = [s for s in output.subjects if _label_present(s, output.question_span)]
+    matches = [[s for s in subjects if _label_present(s, bound.identity)] for bound in item.inputs]
+    if len(matches) != 2 or any(len(labels) != 1 for labels in matches):
+        return None
+    if _canonical_quote(matches[0][0]) == _canonical_quote(matches[1][0]):
+        return None
+    subject = matches[winner][0]
+    if any(_label_present(subject, support.quote) for support in item.inputs[winner].supports):
+        return subject
+    return None
+
+
+def _display_value(item: SupportedValue, *, kind: str | None = None) -> str:
+    """Retain explicit scalar units and the name of an executed winner.
+
+    Formatting cannot infer a unit or shorten a qualified answer. A bare number
+    is a quantity only when the request says so or a literal number/unit phrase
+    occurs in its source; date answers and unresolved labels keep their text.
+    """
+    if item._temporal_display is not None:
+        return item._temporal_display
+    value = item.value.strip()
+    unit = item.unit.strip()
+    if (item.operation == "none" and unit and kind != "date"
+            and re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", value)):
+        quantity_request = kind in {"count", "duration"}
+        quoted_quantity = any(_label_present(f"{value} {unit}", s.quote) for s in item.supports)
+        if quantity_request or quoted_quantity:
+            return f"{value} {unit}"
+    if item.operation != "sum" or item.unit.strip().casefold() not in _CURRENCY_ALIASES:
         return value
-    value = _ISO_DATE.sub(_month_phrase, value)
-    if question and _POLAR_QUESTION.match(question.strip()):
-        lead = _POLAR_LEAD.match(value)
-        if lead is not None:
-            # The model's polarity is kept verbatim; only the justification
-            # after the separator is dropped.  A separator is required so a
-            # hedge such as "no but actually yes" is left alone.
-            return lead.group(1).capitalize()
-
-    lower = _LOWER_BOUND.search(value)
-    if lower is not None:
-        raw = lower.group(1).casefold()
-        number = int(raw) if raw.isdigit() else {
-            word: digit for digit, word in _NUMBER_WORDS.items()
-        }.get(raw)
-        word = _NUMBER_WORDS.get(number) if number is not None else None
-        if word is not None:
-            noun = _counted_noun(question)
-            head = f"{word} {noun}".strip()
-            if head.casefold() not in value.casefold():
-                # Put the counted form first and keep the bound verbatim, so the
-                # sentence still means "three, and no fewer than three".
-                value = f"{head} ({lower.group(0)})"
-    return value
+    number, space, unit = value.partition(" ")
+    if unit != item.unit.strip() or not re.fullmatch(r"-?[0-9]{4,}(?:\.[0-9]+)?", number):
+        return value
+    return f"{Decimal(number):,f}{space}{unit}"
 
 
-def render_table(table: AnswerTable, sources: list[Hit] | None = None) -> str:
+def render_table(
+    table: AnswerTable,
+    sources: list[Hit] | None = None,
+    *,
+    kind: str | None = None,
+    question: str = "",
+) -> str:
     """Join the answer values as one comma-separated list.
 
     A comma is the separator the list itself is made of: the LoCoMo evaluator
@@ -308,675 +1006,106 @@ def render_table(table: AnswerTable, sources: list[Hit] | None = None) -> str:
     naming exactly the same facts. Nothing about the content changes here; the
     list is only written the way the reader parses it.
 
-    When the sources are supplied, a value that is still a relative time phrase
-    is resolved against the utterance that supports it. The phrase stays the
-    same fact, said in calendar form, which is what the question asked for.
+    Values retain the conclusions written by synthesis. Source clocks and
+    time references are generation inputs, not a license to rewrite dates here.
+
+    A partly supported conjunction has a third outcome besides "answered" and
+    "not mentioned": the supported part, plus the named gap. The answer table
+    already records that gap, and dropping it here made the declaration
+    invisible -- LongMemEval's items ask for exactly that sentence ("you
+    mentioned planting 5 plants for tomatoes but you did not mention chili
+    peppers"). Publishing is gated in `_publishable_gap`, because appending a
+    note about an incidental absence would lengthen an answer that was complete.
     """
     values = []
+    advice_only = True
     for slot in table.slots:
         if slot.role != "answer":
             continue
-        for item in slot.values:
-            value = item.value.strip()
-            if sources:
-                value = resolve_relative_value(value, item.supports, sources)
+        for item in answer_values(slot):
+            value = _display_value(item, kind=kind)
             values.append(value)
+            advice_only = advice_only and item.basis == "recommendation"
     values = list(dict.fromkeys(values))
-    return ", ".join(values) if values else "Not mentioned in the conversation"
-
-
-def resolve_relative_value(value: str, supports: list[Support], sources: list[Hit]) -> str:
-    """Turn ``last summer`` into ``summer 2022`` using its own utterance date.
-
-    Only the cited events provide anchors, and only when they agree: two
-    different anchors mean two different events, and choosing one would be a
-    guess. A long value is left alone because replacing it would drop the rest
-    of the answer, which is a fact loss, not a format change.
-    """
-    text = value.strip()
-    if not text or len(text.split()) > 9:
-        return text
-    anchors: list[datetime] = []
-    for support in supports:
-        if not 1 <= support.source_id <= len(sources):
-            continue
-        for event in sources[support.source_id - 1].metadata.get("source_events") or []:
-            if event.get("context_only") or not event.get("occurred_at"):
-                continue
-            utterance = str(event.get("text") or "")
-            if support.quote and support.quote not in utterance:
-                continue
-            try:
-                anchors.append(datetime.fromisoformat(str(event["occurred_at"])))
-            except ValueError:
-                continue
-    if not anchors:
-        return text
-    phrases: set[str] = set()
-    matched = False
-    for anchor in anchors:
-        for derivation in derive_times(text, anchor):
-            if not re.search(r"(?<!\w)" + re.escape(derivation.expression) + r"(?!\w)", text, re.IGNORECASE):
-                continue
-            matched = True
-            if derivation.rule == "explicit_iso_date":
-                continue
-            phrase = render_phrase(derivation)
-            if phrase:
-                phrases.add(phrase)
-    if not matched or len(phrases) != 1:
-        return text
-    return phrases.pop()
-
-
-class BoundValue(SupportedValue):
-    """Model-interpreted relation; provenance checks do not prove entailment."""
-
-    subjects: list[str] = Field(default_factory=list, max_length=8)
-    event: str = Field(default="", max_length=300)
-    event_key: str | None = Field(default=None, max_length=200)
-    identity: str | None = Field(default=None, max_length=200)
-    matches_request: bool = True
-    basis: Literal["stated", "inferred"] = "stated"
-    quantity: int | None = Field(default=None, ge=0)
-    binding_id: str = Field(default="", max_length=48)
-    role_bindings: list["RoleBinding"] = Field(default_factory=list, max_length=8)
-    status: Literal["active", "superseded", "retracted", "conflicted", "uncertain"] = "active"
-    conflict_set_id: str | None = Field(default=None, max_length=64)
-
-
-class RoleBinding(Contract):
-    """A source-backed semantic role; names alone never establish ownership."""
-
-    role: Literal[
-        "speaker", "owner", "giver", "recipient", "participant", "object", "location", "actor"
-    ]
-    entity: str = Field(min_length=1, max_length=200)
-    supports: list[Support] = Field(min_length=1, max_length=8)
-    confidence: Literal["explicit", "resolved", "ambiguous"] = "explicit"
-
-
-class AnswerCandidate(Contract):
-    """A candidate is retained even when the model rejects or cannot resolve it."""
-
-    candidate_id: str = Field(min_length=1, max_length=64)
-    value: str = Field(min_length=1, max_length=700)
-    identity: str | None = Field(default=None, max_length=200)
-    subjects: list[str] = Field(default_factory=list, max_length=8)
-    event_key: str | None = Field(default=None, max_length=200)
-    role_bindings: list[RoleBinding] = Field(default_factory=list, max_length=8)
-    supports: list[Support] = Field(default_factory=list, max_length=8)
-    disposition: Literal["accepted", "rejected", "unresolved"] = "unresolved"
-    reason_code: str = Field(default="", max_length=120)
-
-
-class ConflictRecord(Contract):
-    conflict_set_id: str = Field(min_length=1, max_length=64)
-    binding_ids: list[str] = Field(min_length=1, max_length=8)
-    reason: Literal["contradictory_values", "ambiguous_revision", "version_overlap"]
-    supports: list[Support] = Field(min_length=1, max_length=8)
-
-
-class BindingRevision(Contract):
-    binding_id: str = Field(min_length=1, max_length=48)
-    reason: Literal["interpretation_correction", "contradicting_evidence"]
-    explanation: str = Field(min_length=1, max_length=500)
-    supports: list[Support] = Field(min_length=1, max_length=8)
-
-
-class BoundSlot(Contract):
-    output_id: str
-    values: list[BoundValue] = Field(default_factory=list, max_length=40)
-    missing_inputs: list[str] = Field(default_factory=list, max_length=6)
-    # Bind required input descriptions to concrete evidence, not just a flag
-    # saying the final prose looks relevant.
-    input_support: dict[str, list[Support]] = Field(default_factory=dict)
-    replaced_values: dict[str, str] = Field(default_factory=dict)
-    revisions: list[BindingRevision] = Field(default_factory=list, max_length=20)
-    unresolved_candidates: list[str] = Field(default_factory=list, max_length=8)
-    candidates: list[AnswerCandidate] = Field(default_factory=list, max_length=80)
-    conflict_records: list[ConflictRecord] = Field(default_factory=list, max_length=20)
-    coverage: Literal["complete", "partial", "open", "unknown"] = "unknown"
-    # Completion is relative to examined evidence, never a global absence proof.
-    scope: Literal["open", "explicit_total", "closed"] = "open"
-    scope_support: list[Support] = Field(default_factory=list, max_length=4)
-
-
-class BoundAnswer(Contract):
-    slots: list[BoundSlot] = Field(min_length=1, max_length=8)
-
-
-class EvidenceGap(Contract):
-    output_id: str
-    code: Literal["output_missing", "subject_unresolved", "relation_or_event_unresolved",
-                  "member_scope_unknown", "time_operand_missing", "conflict_unresolved",
-                  "invalid_operation", "candidate_unresolved"]
-    cue: str
-    action: Literal["retrieve", "reread", "uncertain"] = "retrieve"
-
-
-class ExecutionResult(Contract):
-    values: dict[str, list[str]] = Field(default_factory=dict)
-    gaps: list[EvidenceGap] = Field(default_factory=list)
-    rejected: list[dict] = Field(default_factory=list)
-    source_ids: list[int] = Field(default_factory=list)
-    operations: list[dict] = Field(default_factory=list)
-
-    def render(self, *, choice_question: bool = False) -> str:
-        operators = {op["output_id"]: op["operator"] for op in self.operations}
-        groups = []
-        for output_id, values in self.values.items():
-            if values:
-                separator = ", " if operators.get(output_id) == "set" else "; "
-                groups.append(separator.join(dict.fromkeys(values)))
-        if groups:
-            return "; ".join(dict.fromkeys(groups))
-        return "Not mentioned in the conversation" if choice_question else "Insufficient evidence to determine the answer."
-
-
-def follow_up_gaps(result: ExecutionResult) -> tuple[str, list[EvidenceGap]]:
-    """A single extra read budget: repair available premises before acquiring more."""
-    for action in ("reread", "retrieve"):
-        gaps = [g for g in result.gaps if g.action == action]
-        if gaps:
-            return action, gaps
-    return ("unresolved_scope" if result.gaps else "ready"), []
-
-
-def execution_contract(question: str, plan: QueryPlan) -> AnswerContract:
-    """Reject invented question spans; preserve a mandatory whole-question fallback."""
-    if plan.answer_contract and all(o.question_span in question for o in plan.answer_contract.outputs):
-        contract = plan.answer_contract.model_copy(deep=True)
-        for output in contract.outputs:
-            # Qualitative yes/no questions do not require a precise inventory.
-            if output.operator == "count" and re.match(r"(?i)^(?:does|do|is|are|has|have)\b", question.strip()):
-                output.operator = "direct"
-            # ``count`` returns quantities.  A question asking which/who must
-            # return an entity (often an argmax), which this executor cannot
-            # compute.  Falling back to direct source-bound reading is safer
-            # than executing a quantity contract and rejecting the answer.
-            if output.operator == "count" and reader_profile(question) == "entity_selection":
-                output.operator = "direct"
-        return contract
-    kind = answer_type(question)
-    operator = {"text": "direct", "date": "time_point"}.get(kind, kind)
-    if kind == "text" and plan.collection_query:
-        operator = "set"
-    return AnswerContract(outputs=[AnswerOutput(
-        output_id="answer", question_span=question[:1000], operator=operator,
-        subjects=plan.query_entities[:8], qualifier=question[:500],
-        required_inputs=plan.required_info[:6],
-    )])
-
-
-def validate_bound(answer: BoundAnswer, contract: AnswerContract, sources: list[Hit]) -> None:
-    if [s.output_id for s in answer.slots] != [o.output_id for o in contract.outputs]:
-        raise ValueError("Every mandatory output ID must appear exactly once, in contract order")
-    for slot in answer.slots:
-        _materialize_candidates(slot)
-        ids = set()
-        for item in slot.values:
-            # Calculations are checked at execution, independently of binding.
-            plain = SupportedValue(value=item.value, supports=item.supports)
-            validate_table(AnswerTable(slots=[AnswerSlot(target="binding", values=[plain])]),
-                           sources, ["binding"], "text")
-            if not item.binding_id:
-                data = item.model_dump(mode="json", exclude={"binding_id"})
-                item.binding_id = "b_" + hashlib.sha256(
-                    json.dumps([slot.output_id, data], sort_keys=True).encode()
-                ).hexdigest()[:24]
-            if item.binding_id in ids:
-                raise ValueError("Binding IDs must be distinct within an output")
-            ids.add(item.binding_id)
-            for role in item.role_bindings:
-                validate_table(AnswerTable(slots=[AnswerSlot(target="role", values=[
-                    SupportedValue(value=role.entity, supports=role.supports)])]),
-                    sources, ["role"], "text")
-        for candidate in slot.candidates:
-            if candidate.disposition == "accepted" and not candidate.supports:
-                raise ValueError("Accepted candidates require exact supporting quotes")
-            if candidate.supports:
-                validate_table(AnswerTable(slots=[AnswerSlot(target="candidate", values=[
-                    SupportedValue(value=candidate.value, supports=candidate.supports)])]),
-                    sources, ["candidate"], "text")
-            for role in candidate.role_bindings:
-                validate_table(AnswerTable(slots=[AnswerSlot(target="candidate_role", values=[
-                    SupportedValue(value=role.entity, supports=role.supports)])]),
-                    sources, ["candidate_role"], "text")
-        for revision in slot.revisions:
-            validate_table(AnswerTable(slots=[AnswerSlot(target="revision", values=[
-                SupportedValue(value=revision.explanation, supports=revision.supports)])]),
-                sources, ["revision"], "text")
-        for support in slot.scope_support:
-            plain = SupportedValue(value="scope", supports=[support])
-            validate_table(AnswerTable(slots=[AnswerSlot(target="scope", values=[plain])]),
-                           sources, ["scope"], "text")
-        for supports in slot.input_support.values():
-            if not supports:
-                continue
-            validate_table(AnswerTable(slots=[AnswerSlot(target="premise", values=[
-                SupportedValue(value="premise", supports=supports)])]), sources, ["premise"], "text")
-
-
-def merge_incremental(previous: BoundAnswer, revised: BoundAnswer, affected_ids: set[str],
-                      *, sources: list[Hit], contract: AnswerContract) -> BoundAnswer:
-    """Apply a source-checked delta atomically, preserving unmodified support.
-
-    Revision reasons remain model interpretations, not logical entailment proofs.
-    Free-text legacy replaced_values never authorizes deleting a binding.
-    """
-    previous = previous.model_copy(deep=True)
-    revised = revised.model_copy(deep=True)
-    validate_bound(previous, contract, sources)
-    validate_bound(revised, contract, sources)
-    previous_by_id = {s.output_id:s for s in previous.slots}
-    merged = revised.model_copy(deep=True)
-    for index, slot in enumerate(merged.slots):
-        old = previous_by_id[slot.output_id]
-        if slot.output_id not in affected_ids:
-            merged.slots[index] = old.model_copy(deep=True)
-            continue
-        old_by_id = {v.binding_id:v for v in old.values}
-        revisions = {r.binding_id:r for r in slot.revisions}
-        if len(revisions) != len(slot.revisions) or not set(revisions) <= set(old_by_id):
-            raise ValueError("Revision must target one existing binding exactly once")
-        for revision in revisions.values():
-            if re.search(r"(?i)(?:not (?:present|provided|available)|missing|absent).{0,50}(?:current|prompt)|"
-                         r"(?:source|quote).{0,60}not present", revision.explanation):
-                raise ValueError("Not resending a source is not evidence that it is invalid")
-        retained = [v.model_copy(deep=True) for v in old.values if v.binding_id not in revisions]
-        conflicts = list(old.conflict_records) + list(slot.conflict_records)
-        for revision in revisions.values():
-            original = old_by_id[revision.binding_id]
-            if _revision_is_authorized(revision):
-                archived = original.model_copy(deep=True)
-                archived.status = "superseded" if revision.reason == "interpretation_correction" else "retracted"
-                retained.append(archived)
-            else:
-                conflict_id = "revision_" + hashlib.sha256(revision.binding_id.encode()).hexdigest()[:24]
-                old_value = original.model_copy(deep=True)
-                old_value.status = "conflicted"
-                old_value.conflict_set_id = conflict_id
-                retained = [old_value if value.binding_id == old_value.binding_id else value for value in retained]
-                conflicts.append(ConflictRecord(
-                    conflict_set_id=conflict_id,
-                    binding_ids=[revision.binding_id],
-                    reason="ambiguous_revision",
-                    supports=list(revision.supports),
-                ))
-        for value in slot.values:
-            if value.binding_id in old_by_id and value.binding_id not in revisions:
-                if value != old_by_id[value.binding_id]:
-                    raise ValueError("Changing an existing binding requires an evidence-backed revision")
-                continue
-            # Compatible updates merge support; a changed value with the same
-            # identity becomes a conflict instead of silently overwriting state.
-            same = next((v for v in retained if v.status == "active" and _value_key(v) == _value_key(value)), None)
-            if same is not None:
-                same.supports = list({(r.source_id, r.quote): r for r in [*same.supports, *value.supports]}.values())
-                same.role_bindings = list({
-                    (r.role, _norm(r.entity), tuple((s.source_id, s.quote) for s in r.supports)): r
-                    for r in [*same.role_bindings, *value.role_bindings]
-                }.values())
-                continue
-            conflict_with = next((v for v in retained if v.status == "active" and _identity_key(v) == _identity_key(value)
-                                  and _norm(v.value) != _norm(value.value)), None)
-            if conflict_with is not None:
-                conflict_id = _conflict_id(slot.output_id, conflict_with, value)
-                conflict_with.status = "conflicted"
-                conflict_with.conflict_set_id = conflict_id
-                value = value.model_copy(deep=True)
-                value.status = "conflicted"
-                value.conflict_set_id = conflict_id
-                conflicts.append(ConflictRecord(
-                    conflict_set_id=conflict_id,
-                    binding_ids=[conflict_with.binding_id, value.binding_id],
-                    reason="contradictory_values",
-                    supports=list(value.supports),
-                ))
-            if value not in retained:
-                retained.append(value)
-        slot.values = retained
-        slot.conflict_records = list({c.conflict_set_id: c for c in conflicts}.values())
-        slot.input_support = {key:list(refs) for key,refs in old.input_support.items()}
-        for key, refs in revised.slots[index].input_support.items():
-            slot.input_support[key] = list(dict.fromkeys(
-                (r.source_id,r.quote) for r in [*slot.input_support.get(key, []), *refs]
-            ))
-            slot.input_support[key] = [Support(source_id=sid,quote=quote) for sid,quote in slot.input_support[key]]
-        # A positive support and a model-declared missing input cannot silently
-        # erase one another; keep the binding and expose the uncertainty.
-        slot.replaced_values = {}
-    validate_bound(merged, contract, sources)
-    return merged
-
-
-def _materialize_candidates(slot: BoundSlot) -> None:
-    """Turn accepted candidates into answer values before deterministic execution.
-
-    This is the completeness boundary: an accepted candidate cannot disappear
-    between the model's ledger and the rendered answer.
-    """
-    existing = {_value_key(value) for value in slot.values}
-    for candidate in slot.candidates:
-        if candidate.disposition != "accepted" or not candidate.supports:
-            continue
-        value = BoundValue(
-            value=candidate.value,
-            identity=candidate.identity,
-            subjects=list(candidate.subjects),
-            event=candidate.event_key or "",
-            event_key=candidate.event_key,
-            supports=list(candidate.supports),
-            role_bindings=list(candidate.role_bindings),
-            binding_id="candidate_" + hashlib.sha256(candidate.candidate_id.encode()).hexdigest()[:24],
-        )
-        if _value_key(value) not in existing:
-            slot.values.append(value)
-            existing.add(_value_key(value))
-
-
-def _identity_key(value: BoundValue):
-    return tuple(sorted(map(_norm, value.subjects))), _norm(value.identity or value.value)
-
-
-def _revision_is_authorized(revision: BindingRevision) -> bool:
-    if revision.reason == "interpretation_correction":
-        return True
-    text = " ".join([revision.explanation, *(support.quote for support in revision.supports)])
-    return bool(re.search(
-        r"(?i)\b(?:no longer|not anymore|was incorrect|is incorrect|retract|retracted|sold|cancelled|canceled|moved)\b",
-        text,
+    if not values:
+        return "Not mentioned in the conversation"
+    endings = (".", "!", "?", "。", "！", "？")
+    separator = " " if advice_only and all(v.endswith(endings) for v in values) else ", "
+    joined = separator.join(values)
+    gaps = list(dict.fromkeys(
+        gap for slot in table.slots if (gap := _publishable_gap(slot, question))
     ))
+    if gaps:
+        # Every accepted answer target has the same publication contract. An
+        # early return here silently discarded later targets' unmet conditions.
+        for gap in gaps:
+            if _gap_already_published(gap, values):
+                continue
+            joined += (" " if joined.endswith(endings) else ". ") + gap
+    return joined
 
 
-def _conflict_id(output_id: str, left: BoundValue, right: BoundValue) -> str:
-    payload = json.dumps([output_id, _identity_key(left), _identity_key(right)], sort_keys=True)
-    return "conflict_" + hashlib.sha256(payload.encode()).hexdigest()[:24]
+def _gap_already_published(gap: str, values: list[str]) -> bool:
+    """Only omit complete sentences already present verbatim in answer values."""
+    def sentences(text: str) -> set[str]:
+        return {normalized for part in re.split(r"(?<=[.!?。！？])\s+", text.strip())
+                if (normalized := _canonical_quote(part).rstrip(".!?。！？"))}
+    recorded = sentences(gap)
+    published = set().union(*(sentences(value) for value in values))
+    return bool(recorded) and recorded <= published
 
 
-def _norm(text: str) -> str:
-    return " ".join(text.casefold().split())
+# A gap that only says "something is absent" is not yet an answer sentence: it has
+# to name the absent thing the question asked about, which the overlap test does.
+_GAP_ASSERTION = re.compile(
+    r"\bno evidence\b|\bnot (?:mentioned|provided|stated|supported|present|available|specified)\b"
+    r"|\bdid not mention\b|\bonly\b[^.]{0,80}\bsupported\b|\binsufficient\b"
+    r"|\bcannot (?:be )?(?:determined|confirmed)\b",
+    re.IGNORECASE,
+)
+# Without a coordination in the question there is no conjunction to be partly
+# covered, and a missing detail is an ordinary omission rather than a gap in the
+# answer. This is what keeps the clause off complete single-fact answers.
+_GAP_COORDINATION = re.compile(r"\b(?:and|both|plus|as well as|or)\b", re.IGNORECASE)
+_GAP_STOP = frozenset("""the a an and or of to in on at for is are was were it that this with by from
+as be been my i you your we they he she his her its me our their there here what which who whom when
+where why how did do does have has had will would can could should may might must not no yes than then
+so if but about after before during between day days week weeks month months year years time times""".split())
 
 
-def _value_key(value: BoundValue):
-    # Identity groups possible conflicts; the value remains part of the exact
-    # deduplication key so two claims about the same entity are not collapsed.
-    return tuple(sorted(map(_norm, value.subjects))), _norm(value.identity or ""), _norm(value.value)
+def _gap_terms(text: str) -> set[str]:
+    out = set()
+    for word in re.findall(r"[a-z0-9][a-z0-9'-]*", str(text or "").casefold()):
+        word = word.strip("'-")
+        if len(word) > 2 and word not in _GAP_STOP:
+            out.add(word)
+    return out
 
 
-def _mode(output: AnswerOutput) -> str:
-    # Older contracts did not carry quantifier scope. Lists of several owners
-    # default to distributive grouping; new planners explicitly choose the mode.
-    if output.subject_mode == "single" and len(output.subjects) > 1:
-        return "each" if output.operator in {"set", "count"} else "joint"
-    return output.subject_mode
+def _publishable_gap(slot, question: str) -> str:
+    """The recorded gap, when publishing it is what the question asks for.
 
-
-def _subject_matches(output: AnswerOutput, actual: list[str]) -> bool:
-    expected, subjects = set(map(_norm,output.subjects)), set(map(_norm,actual))
-    if not expected:
-        return True
-    if _mode(output) in {"each", "common"}:
-        return bool(expected & subjects)
-    return expected <= subjects
-
-
-def _speaker_conflict(item: BoundValue, sources: list[Hit]) -> bool:
-    """Detect first-person ownership transferred to a different requested actor.
-
-    Report only unambiguous first-person actor spans; other attribution remains
-    a model interpretation. Names in greetings do not resolve the actor.
+    Three conditions, all measured against the recorded rows before this was
+    wired (LoCoMo 1 of 1000 affected, LongMemEval 7): a supported value exists,
+    the question coordinates two or more things, and the gap both asserts an
+    absence and names something the question asked about. Anything looser turns
+    a complete answer into a longer one, which costs precision on list answers.
     """
-    actors = {s.casefold() for s in item.subjects}
-    for support in item.supports:
-        events = sources[support.source_id - 1].metadata.get("source_events", [])
-        for event in events:
-            speaker = str(event.get("speaker") or "")
-            if not speaker or support.quote not in event["text"] or event.get("context_only"):
-                continue
-            if re.search(r"\b(?:I|we) (?:bought|own|have|went|received|adopted|attended|made|built|skyped)\b", support.quote):
-                if actors and speaker.casefold() not in actors:
-                    return True
-    return False
-
-
-def _role_conflict(output: AnswerOutput, item: BoundValue) -> bool:
-    """Apply question quantifiers to explicit source-backed roles."""
-    if not item.role_bindings:
-        return False
-    expected = {_norm(subject) for subject in output.subjects}
-    owners = {_norm(role.entity) for role in item.role_bindings if role.role == "owner"}
-    if owners and expected and not owners & expected:
-        return True
-    if _mode(output) == "joint" and len(expected) > 1:
-        participants = {_norm(role.entity) for role in item.role_bindings
-                        if role.role in {"participant", "actor"}}
-        if not item.event_key:
-            return True
-        if not expected <= participants and not expected <= {_norm(s) for s in item.subjects}:
-            return True
-    if any(role.confidence == "ambiguous" for role in item.role_bindings):
-        return True
-    return False
-
-
-def _execution_values(slot: BoundSlot) -> list[BoundValue]:
-    """Return active bindings only; conflicted values never become facts silently."""
-    return [value for value in slot.values if value.status == "active"]
-
-
-def _explicit_quantity(item: BoundValue) -> bool:
-    if item.quantity is None:
-        return False
-    names = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
-    numeral = str(item.quantity) + ("|" + names[item.quantity] if item.quantity < len(names) else "")
-    for ref in item.supports:
-        text = re.sub(r"\[Image:.*?\]", "", ref.quote, flags=re.DOTALL)
-        if re.search(r"\b(?:have|has|own|owns|total|exactly|only)\b[^.!?]{0,60}\b(?:" + numeral + r")\b", text, re.I):
-            return True
-    return False
-
-
-def _closed_inventory(slot: BoundSlot) -> bool:
-    """A scope claim must say what is exhaustive; ownership alone is open-world."""
-    if slot.scope != "closed" or not slot.scope_support:
-        return False
-    for support in slot.scope_support:
-        text = support.quote.casefold()
-        if "[image:" in text or "photo" in text or "picture" in text:
-            continue
-        if re.search(r"\b(?:all|every|each|only|exactly|total|in total|altogether)\b", text):
-            return True
-    return False
-
-
-def _source_time(item: SupportedValue, sources: list[Hit]) -> str | None:
-    """Resolve only time expressions inside the item's own supporting quotes.
-
-    Recompute from the source anchor instead of trusting model-generated dates.
-    Multiple distinct expressions require an explicit selection, not a guess.
-    """
-    candidates = {}
-    relative_anchors = set()
-    for support in item.supports:
-        for event in sources[support.source_id - 1].metadata.get("source_events", []):
-            if event.get("context_only") or support.quote not in event["text"] or not event.get("occurred_at"):
-                continue
-            anchor = datetime.fromisoformat(event["occurred_at"])
-            if anchor.tzinfo is None:
-                continue
-            for derived in derive_times(event["text"], anchor):
-                if derived.expression not in support.quote:
-                    continue
-                if item.time_expression and _norm(item.time_expression) != _norm(derived.expression):
-                    continue
-                candidates[derived.start,derived.end_exclusive,derived.precision,derived.expression] = derived
-            if re.search(r"\b(?:last|next|this)\s+\w+", item.value, re.IGNORECASE) and item.value in support.quote:
-                relative_anchors.add(anchor.date().isoformat())
-    if len(candidates) > 1:
-        raise ValueError("Several source times match; select the event's time_expression")
-    if candidates:
-        value = next(iter(candidates.values()))
-        if value.precision == "year":
-            return value.start[:4]
-        if value.precision == "month":
-            return datetime.fromisoformat(value.start).strftime("%B %Y")
-        if value.precision == "day":
-            day = datetime.fromisoformat(value.start)
-            return f"{day.day} {day.strftime('%B %Y')}"
-        if value.precision == "week":
-            # Do not append the month of an arbitrarily selected week boundary:
-            # a week may span two months and conversational usage is ambiguous.
-            anchor = datetime.fromisoformat(value.anchor)
-            anchor_text = f"{anchor.day} {anchor.strftime('%B %Y')}"
-            relation = {"last week": "The week before", "next week": "The week after"}
-            if value.expression.casefold() in relation:
-                return f"{relation[value.expression.casefold()]} {anchor_text}"
-            return f"{value.expression} (relative to {anchor_text})"
-        anchor = datetime.fromisoformat(value.anchor)
-        return f"{value.expression} (relative to {anchor.day} {anchor.strftime('%B %Y')})"
-    if item.time_expression:
-        raise ValueError("Selected time_expression is not a supported calendar expression")
-    if len(relative_anchors) == 1:
-        return f"{item.value} (as of {next(iter(relative_anchors))})"
-    return None
-
-
-def check_and_execute(contract: AnswerContract, answer: BoundAnswer, sources: list[Hit]) -> ExecutionResult:
-    validate_bound(answer, contract, sources)
-    result = ExecutionResult()
-    for output, slot in zip(contract.outputs, answer.slots, strict=True):
-        values = []
-        def gap(code, cue, action="retrieve"):
-            record = EvidenceGap(output_id=output.output_id, code=code, cue=cue, action=action)
-            if record not in result.gaps:
-                result.gaps.append(record)
-        if slot.conflict_records:
-            gap("conflict_unresolved", output.question_span, "reread")
-        for item in _execution_values(slot):
-            if not item.matches_request:
-                result.rejected.append({"output_id":output.output_id,"value":item.value,"reason":"relation_or_event_mismatch"})
-                gap("relation_or_event_unresolved", output.question_span, "reread")
-                continue
-            if (not _subject_matches(output, item.subjects)
-                    or _speaker_conflict(item, sources)
-                    or _role_conflict(output, item)):
-                result.rejected.append({"output_id":output.output_id,"value":item.value,"reason":"subject_mismatch"})
-                gap("subject_unresolved", output.question_span, "reread")
-                continue
-            values.append(item)
-        # A scalar question may have several source formulations of the same
-        # quantity ("up to 50", "50", and "40 + 10").  Keep one canonical
-        # answer while retaining all provenance in the binding/trace.  Do not
-        # apply this to comparisons, lists, or multi-period questions.
-        if values and output.operator in {"direct", "time_point", "duration"} and reader_profile(output.question_span) == "single_quantity":
-            grouped = {}
-            for item in values:
-                numbers = re.findall(r"\b\d+(?:\.\d+)?\b", item.value)
-                units = re.findall(r"(?i)\b(?:hours?|minutes?|days?|weeks?|months?|years?|items?|people|flights?)\b", item.value)
-                key = (numbers[-1] if numbers else _norm(item.value), units[-1].casefold() if units else "")
-                grouped.setdefault(key, []).append(item)
-            collapsed = []
-            for group in grouped.values():
-                # Prefer a bound/precision qualifier over a bare restatement;
-                # otherwise choose the shortest equivalent phrase.
-                chosen = sorted(group, key=lambda item: (
-                    not bool(re.search(r"(?i)\b(?:up to|at least|about|around|approximately)\b", item.value)),
-                    len(item.value),
-                ))[0]
-                collapsed.append(chosen)
-            values = collapsed
-        for missing in slot.missing_inputs:
-            gap("relation_or_event_unresolved", missing,
-                "reread" if slot.input_support.get(missing) else "retrieve")
-        for candidate in slot.unresolved_candidates:
-            gap("candidate_unresolved", candidate, "reread")
-        for requirement in output.required_inputs:
-            if not slot.input_support.get(requirement):
-                gap("time_operand_missing" if output.operator in {"time_point","duration"}
-                    else "relation_or_event_unresolved", requirement)
-        if not values:
-            gap("output_missing", output.question_span,
-                "reread" if any(slot.input_support.values()) or slot.values else "retrieve")
-            result.values[output.output_id] = []
-            continue
-        if output.operator == "set" and not _closed_inventory(slot):
-            # An unproven inventory is not itself an actionable missing fact.
-            gap("member_scope_unknown", output.question_span, "uncertain")
-        if output.operator in {"set", "count"}:
-            for candidate in slot.candidates:
-                if candidate.disposition == "unresolved":
-                    gap("candidate_unresolved", candidate.value, "reread" if candidate.supports else "retrieve")
-        if _mode(output) in {"each", "common"}:
-            represented = {_norm(s) for v in values for s in v.subjects}
-            for subject in output.subjects:
-                if _norm(subject) not in represented:
-                    gap("subject_unresolved", f"{subject}: {output.relation}")
-        accepted_sources = sorted({r.source_id for v in values for r in v.supports})
-        if output.operator == "count":
-            mode = _mode(output)
-            groups = {subject:[v for v in values if _norm(subject) in map(_norm,v.subjects)]
-                      for subject in output.subjects} if mode == "each" else {"":values}
-            common_ids = None
-            if mode == "common":
-                ids = [{_norm(v.identity) for v in values if v.identity and v.quantity is None
-                        and _norm(subject) in map(_norm,v.subjects)} for subject in output.subjects]
-                common_ids = set.intersection(*ids) if ids else set()
-            counted = []
-            for subject, group in groups.items():
-                totals = [v for v in group if _explicit_quantity(v)] if mode != "common" else []
-                members = {_norm(v.identity):v for v in group if v.identity and v.quantity is None
-                           and (common_ids is None or _norm(v.identity) in common_ids)}
-                counts = {v.quantity for v in totals}
-                closed = _closed_inventory(slot) and not slot.missing_inputs
-                if len(counts) > 1 or (counts and next(iter(counts)) < len(members)):
-                    gap("conflict_unresolved", f"{subject} {output.question_span}", "reread")
-                elif counts:
-                    counted.append((subject,str(next(iter(counts)))))
-                elif members:
-                    counted.append((subject,str(len(members)) if closed else f"at least {len(members)}"))
-                    if not closed:
-                        gap("member_scope_unknown", output.question_span, "uncertain")
-                else:
-                    gap("member_scope_unknown", f"{subject} {output.question_span}", "uncertain")
-                result.operations.append({"output_id":output.output_id,"operator":"count", "subject":subject,
-                                          "member_ids":sorted(members),"explicit_totals":sorted(counts),
-                                          "scope":slot.scope})
-            result.values[output.output_id] = [f"{s}: {v}" if s else v for s,v in counted]
-        else:
-            rendered = []
-            common = None
-            if _mode(output) == "common":
-                sets = [{_norm(v.value) for v in values if _norm(subject) in map(_norm,v.subjects)}
-                        for subject in output.subjects]
-                common = set.intersection(*sets) if sets else set()
-            for item in values:
-                if common is not None and _norm(item.value) not in common:
-                    continue
-                value = item.value
-                if output.operator in {"duration", "time_point"}:
-                    try:
-                        resolved = _source_time(item, sources) if output.operator == "time_point" else None
-                        if resolved is not None:
-                            value = resolved
-                        else:
-                            if item.calculation and not item.event:
-                                raise ValueError("A calculation must identify the endpoint events")
-                            temp = AnswerTable(slots=[AnswerSlot(target="time", values=[SupportedValue(
-                                value=value, supports=item.supports, calculation=item.calculation)])])
-                            validate_table(temp, sources, ["time"], "duration" if output.operator == "duration" else "date")
-                            value = temp.slots[0].values[0].value
-                    except ValueError as error:
-                        gap("invalid_operation", f"{output.question_span}: {error}", "reread")
-                        continue
-                if _mode(output) == "each" and len(output.subjects) > 1:
-                    owners = [s for s in output.subjects if _norm(s) in map(_norm,item.subjects)]
-                    value = f"{', '.join(owners)}: {value}"
-                rendered.append(value)
-            result.values[output.output_id] = list(dict.fromkeys(rendered))
-            result.operations.append({"output_id":output.output_id,"operator":output.operator,
-                                      "values":result.values[output.output_id]})
-        if result.values.get(output.output_id):
-            result.source_ids = sorted(set(result.source_ids + accepted_sources))
-    return result
+    gap = (slot.missing or "").strip()
+    # Explicit semantic scope replaces language-specific lexical guessing for
+    # new tables. Older persisted tables keep their existing fallback below.
+    if slot.missing_kind == "optional_detail":
+        return ""
+    if slot.missing_kind in {"requested_part", "necessary_premise"}:
+        return gap if slot.role == "answer" and slot.coverage == "partial" and answer_values(slot) else ""
+    if slot.coverage == "partial" and slot.role == "answer":
+        return gap
+    if not gap or not answer_values(slot) or slot.role != "answer":
+        return ""
+    if not question or not _GAP_COORDINATION.search(question):
+        return ""
+    if not _GAP_ASSERTION.search(gap):
+        return ""
+    if not (_gap_terms(question) & _gap_terms(gap)):
+        return ""
+    return gap[:200].rstrip()

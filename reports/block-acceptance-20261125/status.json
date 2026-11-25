@@ -1,0 +1,26 @@
+{
+  "status": "completed_context_only_adopted",
+  "adopted": [
+    "context"
+  ],
+  "validated_but_not_combined": [
+    "rank"
+  ],
+  "rejected": [
+    "operator",
+    "binding",
+    "publication",
+    "lexical"
+  ],
+  "production_files": [
+    "grounding.py",
+    "evidence_policy.py"
+  ],
+  "tests": 1650,
+  "budget_limit_rmb": 10,
+  "normalized_metered_cost_rmb": 3.344184,
+  "reserved_rmb": 0,
+  "unknown_usage_upper_rmb": 0,
+  "scope": "Fixed historical planner, reused stores, native retrieval and generation; exposed development cases. No fresh SimpleMem run.",
+  "not_full_quality_freeze": true
+}

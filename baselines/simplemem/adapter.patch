@@ -1,0 +1,750 @@
+diff --git a/config.paper.py.example b/config.paper.py.example
+new file mode 100644
+index 0000000..2749ba6
+--- /dev/null
++++ b/config.paper.py.example
+@@ -0,0 +1,49 @@
++"""Locked configuration for the MemNexus vs SimpleMem paper comparison.
++
++Copy to ``config.py`` and fill only the API key before a paid run. Keep the
++model, embedding, windows, retrieval bounds, temperature and budget unchanged
++within a reported experiment.
++"""
++
++OPENAI_API_KEY = ""
++OPENAI_BASE_URL = "https://api.deepseek.com"
++LLM_MODEL = "deepseek-v4-flash"
++TEMPERATURE = 0.0
++MAX_TOKENS = 4096
++ENABLE_THINKING = False
++USE_STREAMING = False
++USE_JSON_FORMAT = False  # Extraction returns a top-level JSON array
++
++EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
++EMBEDDING_DIMENSION = 1024
++EMBEDDING_CONTEXT_LENGTH = 32768
++EMBEDDING_QUERY_PROMPT = True
++
++WINDOW_SIZE = 20
++OVERLAP_SIZE = 15  # 20-turn window - 15-turn overlap = stride 5
++SEMANTIC_TOP_K = 20
++KEYWORD_TOP_K = 5
++STRUCTURED_TOP_K = 5
++
++LANCEDB_PATH = "./lancedb_data"
++MEMORY_TABLE_NAME = "memory_entries"
++ENABLE_PARALLEL_PROCESSING = False
++MAX_PARALLEL_WORKERS = 1
++ENABLE_PARALLEL_RETRIEVAL = False
++MAX_RETRIEVAL_WORKERS = 1
++ENABLE_PLANNING = True
++ENABLE_REFLECTION = True
++MAX_REFLECTION_ROUNDS = 2
++
++JUDGE_API_KEY = ""
++JUDGE_BASE_URL = "https://api.deepseek.com"
++JUDGE_MODEL = "deepseek-v4-flash"
++JUDGE_ENABLE_THINKING = False
++JUDGE_USE_STREAMING = False
++JUDGE_TEMPERATURE = 0.0
++
++# Combined ceiling across both systems and judging. The unified runner is the
++# authority for enforcing it; prices must be set to current provider values.
++EXPERIMENT_BUDGET_RMB = 8.0
++INPUT_PRICE_RMB_PER_MILLION_TOKENS = 2.4
++OUTPUT_PRICE_RMB_PER_MILLION_TOKENS = 9.6
+diff --git a/config.py.example b/config.py.example
+index 78c8e6a..576b430 100644
+--- a/config.py.example
++++ b/config.py.example
+@@ -13,7 +13,7 @@ IMPORTANT:
+ 
+ # OpenAI API Key (required)
+ # Get your key from: https://platform.openai.com/api-keys
+-OPENAI_API_KEY = "your-api-key-here"
++OPENAI_API_KEY = ""
+ 
+ # Custom OpenAI Base URL (optional)
+ # Set to None to use default OpenAI endpoint
+@@ -23,17 +23,18 @@ OPENAI_API_KEY = "your-api-key-here"
+ #   - Atlas Cloud: "https://api.atlascloud.ai/v1"  (OpenAI-compatible; LLM_MODEL e.g. "deepseek-ai/deepseek-v4-pro")
+ #   - Local server: "http://localhost:8000/v1"
+ #   - OpenAI (default): None
+-OPENAI_BASE_URL = None
++OPENAI_BASE_URL = "https://api.deepseek.com"
+ 
+ # LLM Model name
+ # Examples: "gpt-4.1-mini", "gpt-4.1", "qwen3-max", "qwen-plus-2025-07-28",
+ #           "deepseek-ai/deepseek-v4-pro" (Atlas Cloud)
+-LLM_MODEL = "gpt-4.1-mini"
++LLM_MODEL = "deepseek-v4-flash"
+ 
+ # Embedding model (local, no API needed)
+ EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+ EMBEDDING_DIMENSION = 1024  # For Qwen3: up to 1024, supports 32-1024
+ EMBEDDING_CONTEXT_LENGTH = 32768  # Qwen3 supports 32k context
++EMBEDDING_QUERY_PROMPT = True  # Query prompt for queries; plain encoding for documents
+ 
+ 
+ # ============================================================================
+@@ -52,6 +53,8 @@ USE_STREAMING = True
+ # Adds response_format={"type": "json_object"} to API calls
+ # Helps prevent parsing failures from extra text like ```json
+ USE_JSON_FORMAT = False
++TEMPERATURE = 0.0
++MAX_TOKENS = 4096
+ 
+ 
+ # ============================================================================
+@@ -59,10 +62,10 @@ USE_JSON_FORMAT = False
+ # ============================================================================
+ 
+ # Number of dialogues per window (for locomo; for other dataset, please finetune it)
+-WINDOW_SIZE = 40
++WINDOW_SIZE = 20
+ 
+ # Window overlap size (for context continuity)
+-OVERLAP_SIZE = 2
++OVERLAP_SIZE = 15  # 20-turn window - 15-turn overlap = stride 5
+ 
+ 
+ # ============================================================================
+@@ -70,7 +73,7 @@ OVERLAP_SIZE = 2
+ # ============================================================================
+ 
+ # Max entries returned by semantic search (vector similarity)
+-SEMANTIC_TOP_K = 25
++SEMANTIC_TOP_K = 20
+ 
+ # Max entries returned by keyword search (BM25 matching)
+ KEYWORD_TOP_K = 5
+@@ -114,19 +117,25 @@ MAX_REFLECTION_ROUNDS = 2
+ # ============================================================================
+ 
+ # Judge LLM API Key (optional - if None, uses OPENAI_API_KEY)
+-JUDGE_API_KEY = "your api-key here"
++JUDGE_API_KEY = ""
+ 
+ # Judge LLM Base URL (optional - if None, uses OPENAI_BASE_URL)
+ # Example: Use cheaper endpoint for evaluation
+-JUDGE_BASE_URL = "https://api.openai.com/v1/"
++JUDGE_BASE_URL = "https://api.deepseek.com"
+ 
+ # Judge LLM Model (optional - if None, uses LLM_MODEL)
+-JUDGE_MODEL = "gpt-4.1-mini"
++JUDGE_MODEL = "deepseek-v4-flash"
+ 
+ # Judge specific settings
+ JUDGE_ENABLE_THINKING = False  # Usually false for evaluation tasks
+ JUDGE_USE_STREAMING = False    # Usually false for evaluation
+-JUDGE_TEMPERATURE = 0.3        
++JUDGE_TEMPERATURE = 0.0
++
++# Hard ceiling for a complete main-model + judge run. Current provider prices
++# must be supplied before enabling paid benchmark calls.
++EXPERIMENT_BUDGET_RMB = 8.0
++INPUT_PRICE_RMB_PER_MILLION_TOKENS = 2.4
++OUTPUT_PRICE_RMB_PER_MILLION_TOKENS = 9.6
+ 
+ # Example configurations:
+ # 1. Use cheaper model for judge evaluation:
+diff --git a/main.py b/main.py
+index 09def04..ad49fa2 100644
+--- a/main.py
++++ b/main.py
+@@ -38,7 +38,8 @@ class SimpleMemSystem:
+         enable_parallel_processing: Optional[bool] = None,
+         max_parallel_workers: Optional[int] = None,
+         enable_parallel_retrieval: Optional[bool] = None,
+-        max_retrieval_workers: Optional[int] = None
++        max_retrieval_workers: Optional[int] = None,
++        embedding_model=None,
+     ):
+         """
+         Initialize system
+@@ -72,7 +73,7 @@ class SimpleMemSystem:
+             enable_thinking=enable_thinking,
+             use_streaming=use_streaming
+         )
+-        self.embedding_model = EmbeddingModel()
++        self.embedding_model = embedding_model or EmbeddingModel()
+         self.vector_store = VectorStore(
+             db_path=db_path,
+             embedding_model=self.embedding_model,
+diff --git a/simplemem/core/memory_builder.py b/simplemem/core/memory_builder.py
+index ab2f541..81f21df 100644
+--- a/simplemem/core/memory_builder.py
++++ b/simplemem/core/memory_builder.py
+@@ -51,6 +51,7 @@ class MemoryBuilder:
+         # Dialogue buffer
+         self.dialogue_buffer: List[Dialogue] = []
+         self.processed_count = 0
++        self.failed_windows = 0
+ 
+         # Previous window entries (for context)
+         self.previous_entries: List[MemoryEntry] = []
+@@ -224,6 +225,7 @@ class MemoryBuilder:
+                 else:
+                     print(f"All {max_retries} attempts failed to parse LLM response: {e}")
+                     print(f"Raw response: {response[:500] if 'response' in locals() else 'No response'}")
++                    self.failed_windows += 1
+                     return []
+ 
+     def _build_extraction_prompt(
+@@ -430,4 +432,5 @@ Now process the above dialogues. Return ONLY the JSON array, no other explanatio
+                     print(f"[Worker {window_num}] Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying...")
+                 else:
+                     print(f"[Worker {window_num}] All {max_retries} attempts failed: {e}")
++                    self.failed_windows += 1
+                     return []
+diff --git a/simplemem/core/settings.py b/simplemem/core/settings.py
+index f1ece2f..c9dbf83 100644
+--- a/simplemem/core/settings.py
++++ b/simplemem/core/settings.py
+@@ -18,14 +18,15 @@ _DEFAULTS = {
+     "EMBEDDING_MODEL": "Qwen/Qwen3-Embedding-0.6B",
+     "EMBEDDING_DIMENSION": 1024,
+     "EMBEDDING_CONTEXT_LENGTH": 32768,
++    "EMBEDDING_QUERY_PROMPT": True,
+     "ENABLE_THINKING": False,
+     "USE_STREAMING": True,
+     "USE_JSON_FORMAT": False,
+-    "TEMPERATURE": 0.3,
++    "TEMPERATURE": 0.0,
+     "MAX_TOKENS": 4096,
+-    "WINDOW_SIZE": 40,
+-    "OVERLAP_SIZE": 2,
+-    "SEMANTIC_TOP_K": 25,
++    "WINDOW_SIZE": 20,
++    "OVERLAP_SIZE": 15,
++    "SEMANTIC_TOP_K": 20,
+     "KEYWORD_TOP_K": 5,
+     "STRUCTURED_TOP_K": 5,
+     "LANCEDB_PATH": "./lancedb_data",
+diff --git a/simplemem/core/utils/embedding.py b/simplemem/core/utils/embedding.py
+index 9463e09..dace9be 100644
+--- a/simplemem/core/utils/embedding.py
++++ b/simplemem/core/utils/embedding.py
+@@ -19,7 +19,7 @@ class EmbeddingModel:
+         print(f"Loading embedding model: {self.model_name}")
+         
+         # Check if it's a Qwen3 model (through SentenceTransformers)
+-        if self.model_name.startswith("qwen3"):
++        if "qwen3" in self.model_name.casefold():
+             self._init_qwen3_sentence_transformer()
+         else:
+             self._init_standard_sentence_transformer()
+@@ -106,7 +106,8 @@ class EmbeddingModel:
+             texts = [texts]
+         
+         # Use query prompt for Qwen3 models when encoding queries
+-        if self.model_type == "qwen3_sentence_transformer" and self.supports_query_prompt and is_query:
++        use_query_prompt = getattr(config, "EMBEDDING_QUERY_PROMPT", True)
++        if self.model_type == "qwen3_sentence_transformer" and use_query_prompt and is_query:
+             return self._encode_with_query_prompt(texts)
+         else:
+             return self._encode_standard(texts)
+@@ -135,17 +136,16 @@ class EmbeddingModel:
+     
+     def _encode_with_query_prompt(self, texts: List[str]) -> np.ndarray:
+         """Encode texts using Qwen3 query prompt"""
+-        try:
+-            embeddings = self.model.encode(
+-                texts, 
+-                prompt_name="query",  # Use Qwen3's query prompt
+-                show_progress_bar=False,
+-                normalize_embeddings=True
++        if not self.supports_query_prompt:
++            raise RuntimeError(
++                "Qwen3 query prompt requested but the loaded model exposes no 'query' prompt"
+             )
+-            return embeddings
+-        except Exception as e:
+-            print(f"Query prompt encoding failed: {e}, falling back to standard encoding")
+-            return self._encode_standard(texts)
++        return self.model.encode(
++            texts,
++            prompt_name="query",
++            show_progress_bar=False,
++            normalize_embeddings=True,
++        )
+     
+     def _encode_standard(self, texts: List[str]) -> np.ndarray:
+         """Encode texts using standard method"""
+diff --git a/simplemem/core/utils/llm_client.py b/simplemem/core/utils/llm_client.py
+index 274d297..6922938 100644
+--- a/simplemem/core/utils/llm_client.py
++++ b/simplemem/core/utils/llm_client.py
+@@ -2,11 +2,53 @@
+ LLM Client - Handles all LLM interactions
+ """
+ import json
++import os
++import tempfile
++import threading
++import time
++from functools import wraps
++from pathlib import Path
+ from typing import List, Dict, Any, Optional
+ from openai import OpenAI
+ from simplemem.core.settings import settings as config
+ 
+ 
++# The benchmark gives every component its own ledger path, but several
++# SimpleMem subsystems can still persist the same client from worker threads.
++# A fixed ``usage.json.tmp`` is unsafe on Windows: one writer can replace or
++# hold the file while another writer is trying to do the same operation.
++_LEDGER_LOCKS: dict[str, threading.Lock] = {}
++_LEDGER_LOCKS_GUARD = threading.Lock()
++
++
++def _ledger_lock(path: Path) -> threading.Lock:
++    key = str(path.resolve()).casefold()
++    with _LEDGER_LOCKS_GUARD:
++        return _LEDGER_LOCKS.setdefault(key, threading.Lock())
++
++
++def _serialized_call(method):
++    @wraps(method)
++    def wrapped(self, *args, **kwargs):
++        # Keep reservation, attempt ID, trace and settlement one transaction.
++        # RLock permits the existing bounded length-recovery recursive call.
++        with self._usage_lock:
++            return method(self, *args, **kwargs)
++    return wrapped
++
++
++class LedgerPersistenceError(BaseException):
++    """Stop the experiment; retrieval fallbacks must not swallow audit failures."""
++
++
++class BudgetExceededError(BaseException):
++    """A provider request cannot fit inside this experiment component's cap."""
++
++
++class TruncatedOutputError(BaseException):
++    """Stop the experiment after its one declared length-recovery request."""
++
++
+ class LLMClient:
+     """
+     Unified LLM client interface
+@@ -24,6 +66,21 @@ class LLMClient:
+         self.base_url = base_url or config.OPENAI_BASE_URL
+         self.enable_thinking = enable_thinking if enable_thinking is not None else config.ENABLE_THINKING
+         self.use_streaming = use_streaming if use_streaming is not None else config.USE_STREAMING
++        self.input_price_rmb = float(getattr(config, "INPUT_PRICE_RMB_PER_MILLION_TOKENS", 0))
++        self.output_price_rmb = float(getattr(config, "OUTPUT_PRICE_RMB_PER_MILLION_TOKENS", 0))
++        self.cost_limit_rmb = float(os.getenv("EXPERIMENT_COMPONENT_BUDGET_RMB", "0"))
++        self.usage = {
++            "provider_attempts": 0,
++            "retry_attempts": 0,
++            "provider_errors": 0,
++            "input_tokens": 0,
++            "output_tokens": 0,
++            "cost_rmb": 0.0,
++        }
++        self._thinking_rejected = False
++        self.telemetry = []
++        self._usage_lock = threading.RLock()
++        self.ledger_path = os.getenv("EXPERIMENT_USAGE_LEDGER_PATH", "").strip()
+ 
+         # Initialize OpenAI client with optional base_url
+         client_kwargs = {"api_key": self.api_key}
+@@ -38,14 +95,18 @@ class LLMClient:
+         self.client = OpenAI(
+             base_url=self.base_url,
+             api_key=self.api_key,
++            max_retries=0,  # All real HTTP attempts must pass our budget check.
++            timeout=180,
+         )
+ 
++    @_serialized_call
+     def chat_completion(
+         self,
+         messages: List[Dict[str, str]],
+         temperature: float = 0.2,
+         response_format: Optional[Dict[str, str]] = None,
+-        max_retries: int = 3
++        max_retries: int = 3,
++        _output_limit: Optional[int] = None,
+     ) -> str:
+         """
+         Standard chat completion with optional thinking mode and retry mechanism
+@@ -53,12 +114,25 @@ class LLMClient:
+         kwargs = {
+             "model": self.model,
+             "messages": messages,
+-            "temperature": temperature,
++            "temperature": config.TEMPERATURE,
++            "max_tokens": _output_limit or config.MAX_TOKENS,
+         }
+ 
+         if response_format:
+             kwargs["response_format"] = response_format
+ 
++        # A proxy-hosted reasoning model spends its whole output budget on the
++        # trace and returns an empty or truncated answer, so the directive is
++        # driven by an explicit flag rather than by the gateway hostname.
++        if getattr(config, "DISABLE_THINKING", True) or "api.deepseek.com" in (self.base_url or ""):
++            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
++
++        estimated_input = len(json.dumps(messages, ensure_ascii=False).encode("utf-8")) + 256
++        projected = (
++            estimated_input * self.input_price_rmb
++            + kwargs["max_tokens"] * self.output_price_rmb
++        ) / 1_000_000
++
+         # Enable thinking mode if configured (for Qwen and compatible models only)
+         # Only add enable_thinking parameter for Qwen API (identified by base_url)
+         is_qwen_api = self.base_url and "dashscope.aliyuncs.com" in self.base_url
+@@ -78,6 +152,33 @@ class LLMClient:
+         # Retry mechanism
+         last_exception = None
+         for attempt in range(max_retries):
++            if self.cost_limit_rmb and self.usage["cost_rmb"] + projected > self.cost_limit_rmb:
++                raise BudgetExceededError(
++                    f"SimpleMem component budget would be exceeded: "
++                    f"{self.usage['cost_rmb'] + projected:.6f} > {self.cost_limit_rmb:.6f} RMB"
++                )
++            started = time.perf_counter()
++            previous_usage = dict(self.usage)
++            self.usage["provider_attempts"] += 1
++            if attempt:
++                self.usage["retry_attempts"] += 1
++            self.usage["reserved_rmb"] = projected
++            try:
++                self._persist_usage()
++                self._trace({"event": "request", "attempt": self.usage["provider_attempts"], "body": kwargs})
++            except OSError as exc:
++                # No provider call has happened. Restore the in-memory count;
++                # preserve any partial files for audit and fail the stage.
++                self.usage.clear()
++                self.usage.update(previous_usage)
++                self.usage["local_errors"] = self.usage.get("local_errors", 0) + 1
++                try:
++                    self._trace({"event":"local_error", "phase":"before_provider_request",
++                                 "error_type":type(exc).__name__})
++                    self._persist_usage()
++                except OSError:
++                    pass
++                raise LedgerPersistenceError("Ledger write failed before sending API request") from exc
+             try:
+                 # Use streaming if configured
+                 if self.use_streaming:
+@@ -85,26 +186,149 @@ class LLMClient:
+                     return self._handle_streaming_response(**kwargs)
+                 else:
+                     response = self.client.chat.completions.create(**kwargs)
++                    provider_usage = response.usage
++                    if provider_usage is None:
++                        self.usage["cost_rmb"] += projected
++                        self.usage["reserved_rmb"] = 0.0
++                        self._persist_usage()
++                        raise BudgetExceededError("Provider returned no usage; reserved maximum cost was charged")
++                    input_tokens = int(getattr(provider_usage, "prompt_tokens", 0) or 0)
++                    output_tokens = int(getattr(provider_usage, "completion_tokens", 0) or 0)
++                    cost = (
++                        input_tokens * self.input_price_rmb
++                        + output_tokens * self.output_price_rmb
++                    ) / 1_000_000
++                    self.usage["input_tokens"] += input_tokens
++                    self.usage["output_tokens"] += output_tokens
++                    self.usage["cost_rmb"] += cost
++                    self.usage["reserved_rmb"] = 0.0
++                    self.telemetry.append(
++                        {
++                            "attempt": self.usage["provider_attempts"],
++                            "input_tokens": input_tokens,
++                            "output_tokens": output_tokens,
++                            "cost_rmb": cost,
++                            "latency_ms": (time.perf_counter() - started) * 1000,
++                            "status": "completed",
++                        }
++                    )
++                    self._persist_usage()
++                    if hasattr(response, "model_dump"):
++                        self._trace({"event": "response", "attempt": self.usage["provider_attempts"],
++                                     "body": response.model_dump(mode="json")})
++                    ceiling = int(os.getenv("EXPERIMENT_TRUNCATION_MAX_TOKENS", "0"))
++                    if getattr(response.choices[0], "finish_reason", None) == "length" and ceiling:
++                        if _output_limit is not None or ceiling <= kwargs["max_tokens"]:
++                            raise TruncatedOutputError("Response truncated after bounded length recovery")
++                        self.usage["length_recovery_attempts"] = self.usage.get("length_recovery_attempts", 0) + 1
++                        self._persist_usage()
++                        return self.chat_completion(
++                            messages, temperature, response_format, max_retries,
++                            _output_limit=ceiling,
++                        )
+                     return response.choices[0].message.content
+                 
+                 # kwargs["stream"] = True
+                 # return self._handle_streaming_response(**kwargs)
+                     
+             except Exception as e:
++                if isinstance(e, OSError) and not self.usage.get("reserved_rmb", 0):
++                    # The provider already replied. Never retry a paid request
++                    # merely because persisting its response failed locally.
++                    raise LedgerPersistenceError("Ledger write failed after provider response") from e
++                if self.usage.get("reserved_rmb", 0):
++                    # A network error can still have incurred upstream usage.
++                    self.usage["cost_rmb"] += self.usage["reserved_rmb"]
++                    self.usage["unknown_usage_upper_bound_rmb"] = self.usage.get("unknown_usage_upper_bound_rmb", 0) + self.usage["reserved_rmb"]
++                    self.usage["reserved_rmb"] = 0.0
++                self.usage["provider_errors"] += 1
++                self._persist_usage()
++                self._trace({"event": "error", "attempt": self.usage["provider_attempts"], "error_type": type(e).__name__})
++                self.telemetry.append(
++                    {
++                        "attempt": self.usage["provider_attempts"],
++                        "latency_ms": (time.perf_counter() - started) * 1000,
++                        "status": "error",
++                        "error_type": type(e).__name__,
++                    }
++                )
++                if isinstance(e, BudgetExceededError):
++                    raise
++                if (
++                    getattr(e, "status_code", None) == 400
++                    and "thinking" in (kwargs.get("extra_body") or {})
++                    and not self._thinking_rejected
++                ):
++                    # A gateway may reject fields it does not implement. Drop
++                    # the directive once and retry instead of failing the stage.
++                    self._thinking_rejected = True
++                    kwargs.pop("extra_body", None)
++                    self._trace({"event": "thinking_directive_rejected",
++                                 "attempt": self.usage["provider_attempts"]})
++                    continue
+                 # print(e)
+                 last_exception = e
+                 if attempt < max_retries - 1:
+-                    import time
+-                    wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+-                    print(f"LLM API call failed (attempt {attempt + 1}/{max_retries}): {e}")
++                    # A rate-limit window is tens of seconds long; 1s/2s/4s
++                    # burns all retries inside the same window and then the unit
++                    # fails. Give HTTP 429 its own, longer ladder.
++                    if getattr(e, "status_code", None) == 429:
++                        wait_time = 15 * (3 ** attempt)  # 15s, 45s
++                    else:
++                        wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
++                    print(f"LLM API call failed (attempt {attempt + 1}/{max_retries}): {type(e).__name__}")
+                     print(f"Retrying in {wait_time} seconds...")
+                     time.sleep(wait_time)
+                 else:
+-                    print(f"LLM API call failed after {max_retries} attempts: {e}")
++                    print(f"LLM API call failed after {max_retries} attempts: {type(e).__name__}")
+         
+         # If all retries failed, raise the last exception
+         raise last_exception
+ 
++    def _persist_usage(self) -> None:
++        if not self.ledger_path:
++            return
++        path = Path(self.ledger_path)
++        path.parent.mkdir(parents=True, exist_ok=True)
++        payload = json.dumps(self.usage, ensure_ascii=False, indent=2)
++        # Use a per-path lock and a unique temporary file.  The retry is only
++        # for transient Windows sharing/antivirus locks; it never hides a
++        # persistent write failure.
++        with _ledger_lock(path):
++            temporary_name = None
++            try:
++                fd, temporary_name = tempfile.mkstemp(
++                    prefix=f"{path.name}.", suffix=".tmp", dir=path.parent
++                )
++                os.close(fd)
++                temporary = Path(temporary_name)
++                temporary.write_text(payload, encoding="utf-8")
++                last_error = None
++                for attempt in range(6):
++                    try:
++                        os.replace(temporary, path)
++                        last_error = None
++                        break
++                    except PermissionError as exc:
++                        last_error = exc
++                        if attempt == 5:
++                            raise
++                        time.sleep(0.05 * (attempt + 1))
++                if last_error is not None:
++                    raise last_error
++            finally:
++                if temporary_name:
++                    try:
++                        Path(temporary_name).unlink(missing_ok=True)
++                    except OSError:
++                        pass
++
++    def _trace(self, record: dict) -> None:
++        if self.ledger_path:
++            path = Path(self.ledger_path).with_suffix(".calls.jsonl")
++            with path.open("a", encoding="utf-8") as handle:
++                handle.write(json.dumps({"time_unix": time.time(), **record}, ensure_ascii=False) + "\n")
++
+     def _handle_streaming_response(self, **kwargs) -> str:
+         """
+         Handle streaming response and collect full content
+@@ -146,6 +370,20 @@ class LLMClient:
+ 
+         text = text.strip()
+ 
++        # A truncated top-level array must never be reinterpreted as its first
++        # complete object. This previously turned partial extraction output into
++        # apparently valid but incomplete memory.
++        unfenced = text
++        if unfenced.lower().startswith("```json"):
++            unfenced = unfenced[7:].lstrip()
++        elif unfenced.startswith("```"):
++            unfenced = unfenced[3:].lstrip()
++        if unfenced.startswith("["):
++            result = self._extract_balanced_json(unfenced, "[")
++            if result is not None:
++                return result
++            raise ValueError("Truncated or invalid top-level JSON array")
++
+         # Remove common LLM prefixes/suffixes
+         common_prefixes = [
+             "Here's the JSON:",
+diff --git a/tests/test_llm_client_usage.py b/tests/test_llm_client_usage.py
+new file mode 100644
+index 0000000..62c9793
+--- /dev/null
++++ b/tests/test_llm_client_usage.py
+@@ -0,0 +1,88 @@
++from types import SimpleNamespace
++
++import pytest
++
++from simplemem.core.utils.llm_client import LLMClient
++
++
++def test_non_streaming_usage_is_recorded(monkeypatch):
++    monkeypatch.setenv("EXPERIMENT_COMPONENT_BUDGET_RMB", "1")
++    client = LLMClient(
++        api_key="test-key",
++        model="deepseek-v4-flash",
++        base_url="https://example.invalid",
++        use_streaming=False,
++    )
++    response = SimpleNamespace(
++        choices=[SimpleNamespace(message=SimpleNamespace(content="OK"))],
++        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=2),
++    )
++    client.client = SimpleNamespace(
++        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: response))
++    )
++
++    assert client.chat_completion([{"role": "user", "content": "probe"}]) == "OK"
++    assert client.usage["provider_attempts"] == 1
++    assert client.usage["input_tokens"] == 10
++    assert client.usage["output_tokens"] == 2
++    assert client.usage["cost_rmb"] > 0
++
++
++def test_deepseek_thinking_is_explicitly_disabled(monkeypatch):
++    monkeypatch.setenv("EXPERIMENT_COMPONENT_BUDGET_RMB", "1")
++    client = LLMClient(
++        api_key="test-key",
++        model="deepseek-v4-flash",
++        base_url="https://api.deepseek.com",
++        use_streaming=False,
++    )
++    captured = {}
++    response = SimpleNamespace(
++        choices=[SimpleNamespace(message=SimpleNamespace(content="OK"))],
++        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
++    )
++
++    def create(**kwargs):
++        captured.update(kwargs)
++        return response
++
++    client.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
++    client.chat_completion([{"role": "user", "content": "probe"}])
++    assert captured["extra_body"] == {"thinking": {"type": "disabled"}}
++
++
++def test_truncated_array_is_not_silently_reduced_to_first_object():
++    client = LLMClient.__new__(LLMClient)
++    with pytest.raises(ValueError, match="top-level JSON array"):
++        client.extract_json('```json\n[{"lossless_restatement":"partial"}')
++
++
++@pytest.mark.parametrize("second_reason", ["stop", "length"])
++def test_one_length_recovery_is_counted_and_bounded(monkeypatch, second_reason):
++    from simplemem.core.utils.llm_client import TruncatedOutputError
++
++    monkeypatch.setenv("EXPERIMENT_TRUNCATION_MAX_TOKENS", "8192")
++    monkeypatch.setenv("EXPERIMENT_COMPONENT_BUDGET_RMB", "1")
++    client = LLMClient(api_key="test", model="test", base_url="https://example.invalid", use_streaming=False)
++    limits = []
++
++    def create(**kwargs):
++        limits.append(kwargs["max_tokens"])
++        return SimpleNamespace(
++            choices=[SimpleNamespace(message=SimpleNamespace(content="valid"),
++                                     finish_reason="length" if len(limits) == 1 else second_reason)],
++            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5),
++        )
++
++    client.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
++    if second_reason == "length":
++        with pytest.raises(TruncatedOutputError):
++            client.chat_completion([{"role": "user", "content": "test"}])
++    else:
++        assert client.chat_completion([{"role": "user", "content": "test"}]) == "valid"
++    assert limits == [4096, 8192]
++    assert client.usage["provider_attempts"] == 2
++    assert client.usage["length_recovery_attempts"] == 1
++    assert client.usage["input_tokens"] == 20
++    assert client.usage["output_tokens"] == 10
++    assert client.usage["reserved_rmb"] == 0
+diff --git a/tests/test_qwen_embedding_roles.py b/tests/test_qwen_embedding_roles.py
+new file mode 100644
+index 0000000..74492af
+--- /dev/null
++++ b/tests/test_qwen_embedding_roles.py
+@@ -0,0 +1,41 @@
++import numpy as np
++
++from simplemem.core.utils.embedding import EmbeddingModel
++
++
++class FakeQwen:
++    prompts = {"query": "query:"}
++
++    def __init__(self):
++        self.calls = []
++
++    def encode(self, texts, **kwargs):
++        self.calls.append(kwargs)
++        return np.asarray([[1.0, 0.0] for _ in texts])
++
++
++def test_qwen_query_uses_prompt_and_documents_do_not():
++    embedding = EmbeddingModel.__new__(EmbeddingModel)
++    embedding.model = FakeQwen()
++    embedding.model_type = "qwen3_sentence_transformer"
++    embedding.supports_query_prompt = True
++
++    embedding.encode_query(["question"])
++    embedding.encode_documents(["memory"])
++
++    assert embedding.model.calls[0]["prompt_name"] == "query"
++    assert "prompt_name" not in embedding.model.calls[1]
++
++
++def test_qwen_query_prompt_mismatch_fails_closed():
++    embedding = EmbeddingModel.__new__(EmbeddingModel)
++    embedding.model = FakeQwen()
++    embedding.model_type = "qwen3_sentence_transformer"
++    embedding.supports_query_prompt = False
++
++    try:
++        embedding.encode_query(["question"])
++    except RuntimeError as error:
++        assert "query prompt" in str(error)
++    else:
++        raise AssertionError("query encoding silently fell back to document encoding")

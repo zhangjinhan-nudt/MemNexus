@@ -30,7 +30,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=SOURCE)
     parser.add_argument("--budget", type=int, default=7000)
-    parser.add_argument("--raw-limit", type=int, default=6)
     args = parser.parse_args()
     source_path = args.source.resolve()
     report = read(source_path)
@@ -70,7 +69,6 @@ def main():
             resolved_turns=by_id,
             blocked_events=set(),
             max_sources=20,
-            raw_limit=args.raw_limit if route.recall_policy == "recall_first" else 3,
             budget=args.budget if route.recall_policy == "recall_first" else 5000,
             candidate_limit=120,
         )
@@ -147,7 +145,7 @@ def main():
         "scope": "13 category-1 development questions from saved memory snapshots",
         "note": "Gold IDs are compared only after retrieval. This replay measures source coverage, not answer accuracy.",
         "budget_characters": args.budget,
-        "raw_limit": args.raw_limit,
+        "selection_policy": "complete_source_units_single_budget",
         "old_all_gold": sum(item["old_all_gold"] for item in rows),
         "new_all_gold": sum(item["new_all_gold"] for item in rows),
         "old_wrong_old_all_gold": sum(

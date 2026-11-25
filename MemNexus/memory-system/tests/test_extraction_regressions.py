@@ -96,6 +96,33 @@ def test_real_failure_pattern_repairs_field_drift_and_event_date_without_rewriti
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("repaired", [True, False])
+@pytest.mark.parametrize("filter_candidates", ["0", "1"])
+def test_unbound_project_scope_uses_existing_single_repair(repaired, filter_candidates, monkeypatch):
+    monkeypatch.setenv("MEMORY_EXPERIMENT_DROP_QUESTION_CANDIDATES", filter_candidates)
+    async def scenario():
+        window = correction_window()
+        window.session.project_id = None
+        outputs = [correction_output(window), correction_output(window, scope_type="session")]
+        prompts = []
+
+        async def chat(prompt):
+            prompts.append(prompt)
+            return json.dumps(outputs[min(len(prompts) - 1, 1) if repaired else 0], ensure_ascii=False)
+
+        if repaired:
+            result = await CallableModel(chat).extract(window)
+            assert result.candidates[0].scope_type == "session"
+            assert result.candidates[0].value == "2027-02-03"
+        else:
+            with pytest.raises(ModelOutputError, match="Project memory requires a project session"):
+                await CallableModel(chat).extract(window)
+        assert len(prompts) == 2
+        assert "Project memory requires a project session" in prompts[1]
+
+    asyncio.run(scenario())
+
+
 def test_deadline_value_is_not_sufficient_evidence_for_fact_validity():
     async def scenario():
         window = correction_window()
@@ -164,7 +191,7 @@ def test_schema_and_evidence_repair_share_two_total_calls_and_deadline():
     asyncio.run(scenario())
 
 
-def test_reference_catalog_is_scoped_relevant_current_and_budgeted(tmp_path):
+def test_reference_catalog_is_scoped_relevant_state_labeled_and_budgeted(tmp_path):
     async def scenario():
         runtime = MemoryRuntime(Settings(db_path=tmp_path / "memory.db"))
         scope = Scope(tenant_id="t", owner_id="alice")
@@ -209,7 +236,9 @@ def test_reference_catalog_is_scoped_relevant_current_and_budgeted(tmp_path):
                 ),
             )
             window = await runtime.short_term.window(scope, current.session_id)
-            assert [ref.subject for ref in window.reference_fields] == ["远航项目报告"]
+            assert {ref.subject for ref in window.reference_fields} == {"远航项目报告", "远航项目报告过期事实"}
+            historical = next(ref for ref in window.reference_fields if ref.subject.endswith("过期事实"))
+            assert historical.valid_to is not None and historical.valid_to < utcnow()
             assert len(window.model_dump_json()) + 1000 <= runtime.settings.window_token_limit
         finally:
             await runtime.close()

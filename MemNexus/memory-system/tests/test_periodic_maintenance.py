@@ -10,7 +10,7 @@ from agent_memory.runtime import MemoryRuntime
 from agent_memory.settings import Settings
 
 
-def test_periodic_worker_archives_expired_event_and_stops(tmp_path):
+def test_periodic_worker_keeps_expired_event_history_and_stops(tmp_path):
     async def run():
         runtime = MemoryRuntime(Settings(db_path=tmp_path / "worker.db", maintenance_interval=0.01))
         scope = Scope(tenant_id="t", owner_id="a")
@@ -47,7 +47,9 @@ def test_periodic_worker_archives_expired_event_and_stops(tmp_path):
         task = asyncio.create_task(runtime.maintenance_worker(scope))
         try:
             await asyncio.wait_for(completed.wait(), 3)
-            assert runtime.store.get_memory(scope, memory.memory_id).status == "archived"
+            retained = runtime.store.get_memory(scope, memory.memory_id)
+            assert retained.status == "active"
+            assert retained.evidence == memory.evidence
             assert runtime.maintenance_state["last_completed_at"]
         finally:
             task.cancel()

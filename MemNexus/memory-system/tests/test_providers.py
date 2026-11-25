@@ -56,6 +56,92 @@ def sample_extraction() -> dict:
 
 
 class ProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repaired_extraction_keeps_whole_valid_candidates_under_both_policies(self):
+        data = sample_extraction()
+        valid = data["candidates"][0]
+        invalid = {**valid, "predicate": "x" * 101}
+        data["candidates"] = [invalid, valid]
+        for flag in ("0", "1"):
+            with self.subTest(flag=flag), patch.dict(os.environ, {"MEMORY_EXPERIMENT_DROP_QUESTION_CANDIDATES": flag}):
+                prompts = []
+
+                async def chat(prompt):
+                    prompts.append(prompt)
+                    return json.dumps(data)
+
+                model = CallableModel(chat)
+                result = await model.extract(sample_window())
+                self.assertEqual(len(prompts), 2)
+                self.assertEqual(result.summary, data["summary"])
+                self.assertEqual(len(result.candidates), 1)
+                [retained] = result.candidates
+                self.assertEqual(retained.predicate, valid["predicate"])
+                self.assertEqual(retained.evidence[0].model_dump(exclude_none=True), valid["evidence"][0])
+                self.assertEqual(model.validation_rejections["Invalid candidate schema after one complete repair"], 1)
+
+    async def test_repaired_extraction_requires_complete_structure_and_authorized_scope(self):
+        data = sample_extraction()
+        valid = data["candidates"][0]
+        invalid = {**valid, "predicate": "x" * 101}
+        examples = {
+            "invalid_json": '{"candidates":[',
+            "top_level_error": json.dumps({"summary": [], "candidates": [valid, invalid]}),
+            "no_valid_candidate": json.dumps({"candidates": [invalid]}),
+            "scope_violation": json.dumps({"candidates": [{**valid, "scope_type": "project"}, invalid]}),
+        }
+        for flag in ("0", "1"):
+            for case, output in examples.items():
+                with self.subTest(flag=flag, case=case), patch.dict(os.environ, {"MEMORY_EXPERIMENT_DROP_QUESTION_CANDIDATES": flag}):
+                    prompts = []
+
+                    async def chat(prompt):
+                        prompts.append(prompt)
+                        return output
+
+                    with self.assertRaises(ModelOutputError):
+                        await CallableModel(chat).extract(sample_window())
+                    self.assertEqual(len(prompts), 2)
+
+    async def test_candidate_schema_recovery_keeps_existing_quote_policy(self):
+        valid = sample_extraction()["candidates"][0]
+        invalid_schema = {**valid, "predicate": "x" * 101}
+        false_quote = {**valid, "evidence": [{**valid["evidence"][0], "quote": "伪造的引文"}]}
+        output = json.dumps({"candidates": [invalid_schema, false_quote, valid]})
+        for flag in ("0", "1"):
+            with self.subTest(flag=flag), patch.dict(os.environ, {"MEMORY_EXPERIMENT_DROP_QUESTION_CANDIDATES": flag}):
+                model = CallableModel(lambda _: output)
+                if flag == "0":
+                    with self.assertRaisesRegex(ModelOutputError, "exact substring"):
+                        await model.extract(sample_window())
+                else:
+                    result = await model.extract(sample_window())
+                    self.assertEqual([c.evidence[0].quote for c in result.candidates], [valid["evidence"][0]["quote"]])
+
+    async def test_extraction_output_limit_repairs_from_original_input_once(self):
+        calls = []
+        partial = "partial output must not be replayed"
+
+        def reply(request):
+            body = json.loads(request.content)
+            calls.append(body)
+            first = len(calls) == 1
+            payload = {
+                "choices": [{"finish_reason": "length" if first else "stop",
+                             "message": {"content": partial if first else json.dumps(sample_extraction())}}],
+                "usage": {"prompt_tokens": 500, "completion_tokens": 50},
+            }
+            return httpx.Response(200, json=payload)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as client:
+            model = OpenAICompatibleModel(base_url="https://test.invalid/v1", model="test", client=client)
+            result = await model.extract(sample_window())
+        self.assertEqual(len(result.candidates), 1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]["max_tokens"], calls[1]["max_tokens"])
+        repair = calls[1]["messages"][0]["content"]
+        self.assertTrue(repair.startswith(calls[0]["messages"][0]["content"]))
+        self.assertNotIn(partial, repair)
+
     async def test_unconfigured_has_no_factual_fallback(self):
         model = UnconfiguredModel()
         for operation in (

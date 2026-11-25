@@ -1,27 +1,21 @@
-"""Regression tests for the two deterministic rendering defects.
+"""Source-time parsing and content-preserving publication have separate owners.
 
-Defect 1 -- an elapsed offset that carries its own written calendar anchor
-    ("3 years before January 23, 2022") was never resolved, because the only
-    offset rule matched "N units ago" and used the utterance date as the anchor.
-    The value reached the evaluator as a relative phrase and scored ~0 against a
-    gold answer written as a bare year.  Motivating items: conv-42/8 (F1 0.0)
-    and conv-47/4 (F1 22.2).
-
-Defect 2 -- a yes/no question was answered with the polarity plus a
-    justification ("No, he had no pets at that time").  The obligation is a
-    single polar token; the justification is pure precision loss under
-    token-overlap F1.  Motivating items: conv-44/8 and conv-47/3 (both F1 22.2).
-
-The fixtures below are the recorded values, not benchmark predictions: no
-provider is contacted and no usage is billed.
+The parser retains source-anchored calendar rules. Publication must preserve
+supported content, including relative phrases, explanations and recommendations
+following a leading yes/no. Fixtures are synthetic; no provider is contacted.
 """
 
 from datetime import UTC, datetime
 
 import pytest
 
+from agent_memory.models import Hit
+from agent_memory.synthesis import (
+    AnswerTable,
+    normalize_answer_text,
+    render_table,
+)
 from agent_memory.temporal import derive_times, render_phrase
-from agent_memory.synthesis import normalize_answer_text
 
 ANCHOR = datetime(2022, 1, 23, 14, 1, tzinfo=UTC)
 
@@ -63,19 +57,21 @@ def test_an_absolute_date_without_a_direction_word_is_left_alone():
 
 
 @pytest.mark.parametrize(
-    "value,question,expected",
+    "value,question",
     [
-        ("No, he had no pets at that time", "Did Andrew have a pet dog during March 2023?", "No"),
-        ("Yes, because he said so", "Does James live in Connecticut?", "Yes"),
-        ("No", "Did Andrew have a pet dog during March 2023?", "No"),
+        ("No, he had no pets at that time", "Did Andrew have a pet dog during March 2023?"),
+        ("Yes, because he said so", "Does James live in Connecticut?"),
+        ("No", "Did Andrew have a pet dog during March 2023?"),
+        ("Yes, try a history podcast during your commute.", "Can you recommend an activity for my commute?"),
+        ("Yes, and here is why: the cost went down.", "Did the cost go down, and why?"),
     ],
 )
-def test_polar_question_keeps_only_the_polarity(value, question, expected):
-    assert normalize_answer_text(value, question) == expected
+def test_normalization_preserves_explanations_and_requested_advice(value, question):
+    assert normalize_answer_text(value, question) == value
 
 
 def test_a_hedged_polarity_without_a_separator_is_not_truncated():
-    """'no but actually yes' must survive intact; only separated tails are cut."""
+    """A hedge remains part of the published claim."""
     assert normalize_answer_text(
         "No but actually yes", "Did Andrew have a pet dog during March 2023?"
     ) == "No but actually yes"
@@ -90,3 +86,29 @@ def test_a_non_polar_question_is_untouched():
 def test_polar_normalisation_is_idempotent():
     once = normalize_answer_text("No, he had no pets", "Did he have a pet?")
     assert normalize_answer_text(once, "Did he have a pet?") == once
+
+
+@pytest.mark.parametrize("kind", ["text", "count", "duration", "offset", None])
+def test_other_answer_kinds_never_replace_their_content_with_a_date(kind):
+    text = "I bought a bike last month."
+    source = Hit(content=text, score=1, source_file="fixture", chunk_id="fixture", metadata={
+        "source_events": [{"text": text, "role": "user", "occurred_at": "2024-05-20T00:00:00+00:00"}],
+    })
+    table = AnswerTable.model_validate({"slots": [{"derivation": "Fixture audit of the cited evidence.", "target": "What did I do recently?", "values": [{
+        "value": "Bought a bike last month", "supports": [{"source_id": 1, "quote": text}],
+    }]}]})
+    assert render_table(table, [source], kind=kind) == "Bought a bike last month"
+
+
+def test_date_rendering_preserves_relative_expression_and_surrounding_content():
+    text = "I bought a bike last month."
+    source = Hit(content=text, score=1, source_file="fixture", chunk_id="fixture", metadata={
+        "source_events": [{"text": text, "role": "user", "occurred_at": "2024-05-20T00:00:00+00:00"}],
+    })
+    table = AnswerTable.model_validate({"slots": [{"derivation": "Fixture audit of the cited evidence.", "target": "When did I buy a bike?", "values": [{
+        "value": "last month", "supports": [{"source_id": 1, "quote": text}],
+    }]}]})
+    assert render_table(table, [source], kind="date") == "last month"
+    item = table.slots[0].values[0]
+    item.value = "Bought a bike last month"
+    assert render_table(table, [source], kind="date") == "Bought a bike last month"

@@ -1,0 +1,49 @@
+{
+  "checks": [
+    {
+      "name": "unpatched_check",
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "passed": true,
+      "output": "Adapter not restored, or files differ: config.paper.py.example, config.py.example, main.py, simplemem/core/memory_builder.py, simplemem/core/settings.py, simplemem/core/utils/embedding.py, simplemem/core/utils/llm_client.py, tests/test_llm_client_usage.py, tests/test_qwen_embedding_roles.py"
+    },
+    {
+      "name": "apply_clean_upstream",
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true,
+      "output": "SimpleMem adapter restored and verified: 464 files; no API calls."
+    },
+    {
+      "name": "apply_idempotent",
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true,
+      "output": "SimpleMem adapter verified: 464 files; no API calls."
+    },
+    {
+      "name": "local_worktree_equivalence",
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "passed": true,
+      "output": "SimpleMem adapter verified: 464 files; no API calls."
+    },
+    {
+      "name": "refuse_overwriting_local_edits",
+      "actual_exit": 1,
+      "passed": true,
+      "output": "Refusing to overwrite existing new adapter file: config.paper.py.example"
+    },
+    {
+      "name": "windows_crlf_checkout_restore",
+      "actual_exit": 0,
+      "passed": true,
+      "output": "SimpleMem adapter restored and verified: 464 files; no API calls."
+    }
+  ],
+  "api_calls": 0,
+  "upstream_commit": "db80b6a7c591e0ea730a058e9f5fc4eb06572299",
+  "patch_sha256": "3f66d53aefa5033991832f67c39638e4dc460fce2ded3976f86245f59cb59b92",
+  "local_source_modified": false,
+  "local_git_index_modified": false
+}

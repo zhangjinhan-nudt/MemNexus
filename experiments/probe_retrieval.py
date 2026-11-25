@@ -39,7 +39,6 @@ def build_runtime(database: Path) -> MemoryRuntime:
             output_language="en",
             evidence_grounding_enabled=True,
             grounding_semantic_enabled=False,
-            grounding_max_raw_sources=3,
         )
     )
 

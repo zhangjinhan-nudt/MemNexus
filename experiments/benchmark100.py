@@ -179,12 +179,7 @@ def configure(value):
         "LLM_MODEL", "JUDGE_MODEL", "TEMPERATURE", "MAX_TOKENS", "WINDOW_SIZE", "OVERLAP_SIZE",
         "SEMANTIC_TOP_K", "KEYWORD_TOP_K", "STRUCTURED_TOP_K", "ENABLE_PLANNING", "ENABLE_REFLECTION",
         "MAX_REFLECTION_ROUNDS", "EMBEDDING_MODEL", "EMBEDDING_DIMENSION", "EMBEDDING_QUERY_PROMPT")}
-    public.update(semantic_execution=settings.semantic_execution_enabled,
-                  premise_retrieval=settings.premise_retrieval_enabled,
-                  reread=settings.reread_enabled,
-                  open_domain_compat=settings.open_domain_compat,
-                  semantic_max_answer_calls=settings.semantic_max_answer_calls,
-                  collection_queries=settings.collection_queries_enabled,
+    public.update(answer_pipeline="source_bound_synthesis",
                   model=model_names["SimpleMem"], prices_rmb_per_million=[2.4,9.6], answer_cache=False,
                   planner_mode="model", output_language="en", embedding_encoding="query_prompt",
                   memnexus_pending_turns=5, memnexus_context_turns=15,

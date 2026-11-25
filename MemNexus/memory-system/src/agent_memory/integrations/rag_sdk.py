@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Protocol
+from typing import Literal, Protocol
 
 from server.engines.memory_plugin_api import EngineCapabilities, MemoryEnginePlugin
 
@@ -31,7 +31,8 @@ class Runtime(Protocol):
     ) -> SearchResponse: ...
 
     async def answer(
-        self, scope: Scope, session_id: str, query: str, top_k: int = 10, timeout: float = 30.0
+        self, scope: Scope, session_id: str, query: str, top_k: int = 10, timeout: float = 30.0,
+        *, source_session_ids: tuple[str, ...] = (), source_read_scope: Literal["quotes", "events"] = "quotes",
     ) -> AnswerResponse: ...
 
     async def health(self) -> dict: ...
@@ -41,20 +42,27 @@ class Runtime(Protocol):
 class RequestContext:
     scope: Scope
     session_id: str
+    source_session_ids: tuple[str, ...] = ()
+    source_read_scope: Literal["quotes", "events"] = "quotes"
 
 
 _request_context: ContextVar[RequestContext | None] = ContextVar("agent_memory_request", default=None)
 
 
 @contextmanager
-def bind_request(scope: Scope, session_id: str) -> Iterator[RequestContext]:
+def bind_request(scope: Scope, session_id: str, *, source_session_ids: tuple[str, ...] = (),
+                 source_read_scope: Literal["quotes", "events"] = "quotes") -> Iterator[RequestContext]:
     """Bind host-verified identity; establish this before creating child tasks."""
     if not isinstance(session_id, str) or not session_id.strip():
         raise ValueError("An authorized session_id is required")
-    context = RequestContext(scope=scope.model_copy(deep=True), session_id=session_id)
+    if source_read_scope not in {"quotes", "events"}:
+        raise ValueError("source_read_scope must be quotes or events")
+    context = RequestContext(scope=scope.model_copy(deep=True), session_id=session_id,
+                             source_session_ids=tuple(source_session_ids), source_read_scope=source_read_scope)
     token = _request_context.set(context)
     try:
-        yield RequestContext(scope=context.scope.model_copy(deep=True), session_id=context.session_id)
+        yield RequestContext(scope=context.scope.model_copy(deep=True), session_id=context.session_id,
+                             source_session_ids=context.source_session_ids, source_read_scope=context.source_read_scope)
     finally:
         _request_context.reset(token)
 
@@ -65,7 +73,8 @@ def require_context() -> RequestContext:
         raise PermissionError("Bind an authenticated memory request context before invoking the SDK")
     # ContextVars copy references into child tasks. Never expose the stored mutable
     # Pydantic scope, otherwise one child can change the identity of its siblings.
-    return RequestContext(scope=context.scope.model_copy(deep=True), session_id=context.session_id)
+    return RequestContext(scope=context.scope.model_copy(deep=True), session_id=context.session_id,
+                          source_session_ids=context.source_session_ids, source_read_scope=context.source_read_scope)
 
 
 def _validate_request(query: str, top_k: int, timeout: float) -> None:
@@ -139,7 +148,9 @@ class SimpleMemoryEngine(MemoryEnginePlugin):
         _validate_request(query, top_k, timeout)
         async with asyncio.timeout(timeout):
             answer = await runtime.answer(
-                context.scope, context.session_id, query, top_k=top_k, timeout=timeout
+                context.scope, context.session_id, query, top_k=top_k, timeout=timeout,
+                **({"source_session_ids": context.source_session_ids} if context.source_session_ids else {}),
+                **({"source_read_scope": context.source_read_scope} if context.source_read_scope != "quotes" else {}),
             )
         return answer.model_dump(mode="json")
 

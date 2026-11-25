@@ -23,6 +23,27 @@ from agent_memory.store import SQLiteStore
 from agent_memory.temporal import derive_times
 
 
+def test_authorized_event_keeps_disjoint_quotes_without_spending_slots_on_duplicates():
+    introduction = "These are the options."
+    detail = "The third option is linen."
+    content = "Private greeting. " + introduction + " Unquoted aside. " + detail
+    turn = Turn(turn_id="turn-old", session_id="old", request_id="r", sequence=1,
+                events=[Event(role="assistant", speaker="Avery", content=content)])
+    quotes = [introduction, introduction, "the options", detail]
+    hit = Hit(content=introduction, score=0.9, source_file="index", chunk_id="choices",
+              metadata={"origin": "indexed_sweep", "source_support_status": "authorized_session_quote",
+                        "evidence": [dict(turn_id=turn.turn_id, event_index=0, quote=q) for q in quotes]})
+    result = ground_evidence("What were the options?", QueryPlan(), [hit],
+                             session_id="current", current_turns=[], resolved_turns={turn.turn_id: turn},
+                             blocked_events={(turn.turn_id, 0)}, budget=9000)
+    selected, = result.sources
+    spans = selected.metadata["source_events"]
+    assert [span["text"] for span in spans] == [introduction, detail]
+    assert all(content[span["start"]:span["end"]] == span["text"] for span in spans)
+    assert all(span["role"] == "assistant" and span["context_only"] for span in spans)
+    assert "Unquoted aside" not in str(source_payload(selected))
+
+
 @pytest.mark.parametrize(
     "text,expected",
     [
@@ -173,7 +194,6 @@ def test_raw_fallback_recovers_omitted_fact_without_model_or_gold():
         current_turns=turns,
         resolved_turns={},
         blocked_events=set(),
-        raw_limit=2,
         max_sources=2,
         budget=2000,
     )

@@ -5,12 +5,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from agent_memory.grounding import _source_event, reread_evidence, source_payload
+from agent_memory.grounding import _source_event, source_payload
 from agent_memory.models import Event, Hit, QueryPlan, Turn
 from agent_memory.prompt_codec import compact_schema, evidence_catalog
 from agent_memory.providers import CallableModel
 from agent_memory.reasoning import classify_question
-from agent_memory.synthesis import BoundAnswer, BoundSlot, BoundValue, EvidenceGap, ExecutionResult, Support
 
 
 def source(n, text, speaker="Inez"):
@@ -47,35 +46,40 @@ def test_times_substring_is_not_a_count_route(q):
     assert classify_question(q).kind != 'count'
 
 
-def test_existing_evidence_reread_needs_no_new_event():
-    t,h = source(1, "The parcel was delivered on Friday.")
-    gap = EvidenceGap(output_id='arrival', code='candidate_unresolved', cue='parcel delivered Friday', action='reread')
-    bindings = BoundAnswer(slots=[BoundSlot(output_id='arrival', values=[
-        BoundValue(value='Friday', supports=[Support(source_id=1,quote=h.content)])])])
-    sources, receipt = reread_evidence([h], turns=[t], session_id='s',blocked_events=set(),budget=0,
-                                      query='When was the parcel delivered?',gaps=[gap],bindings=bindings)
-    assert sources == [h]
-    assert receipt['read_source_ids'] == [1]
-    assert receipt['added_context_chars'] == 0
-
-
-def test_render_set_keeps_every_value_without_rephrasing():
-    result = ExecutionResult(values={'names':['Ada','Bela','Chen']},operations=[{'output_id':'names','operator':'set'}])
-    assert result.render() == 'Ada, Bela, Chen'
-
-
 def test_factual_planner_expands_into_existing_contract():
     async def scenario():
         prompts=[]
         def chat(prompt):
             prompts.append(prompt)
             return json.dumps({'route':'both','semantic_queries':['Inez arrival'],'required_info':['arrival date'],
-                               'answer_contract':{'outputs':[{'output_id':'arrival','question_span':'When did Inez arrive?','operator':'time_point'}]}})
+                               'collection_query': None})
         result = await CallableModel(chat).plan('When did Inez arrive?',{})
         assert isinstance(result, QueryPlan)
         assert result.response_intent == 'direct_answer'
-        assert result.answer_contract.outputs[0].operator == 'time_point'
+        assert result.answer_contract is None
+        assert result.required_info == ['arrival date']
+        assert 'answer_contract' in prompts[0]
+        assert 'required_inputs' not in prompts[0]
         assert 'action_template' not in prompts[0]
+    asyncio.run(scenario())
+
+
+def test_action_planner_omits_retired_contract_but_preserves_action_fields():
+    async def scenario():
+        prompts = []
+
+        def chat(prompt):
+            prompts.append(prompt)
+            return json.dumps({'response_intent': 'action_plan', 'action_template': 'general_action_plan',
+                               'problem_breakdown': ['available resources']})
+
+        result = await CallableModel(chat).plan('Plan the project steps', {})
+        assert isinstance(result, QueryPlan)
+        assert result.action_template == 'general_action_plan'
+        assert result.problem_breakdown == ['available resources']
+        assert result.answer_contract is None
+        assert 'answer_contract' not in prompts[0]
+
     asyncio.run(scenario())
 
 

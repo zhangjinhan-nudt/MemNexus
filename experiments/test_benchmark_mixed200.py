@@ -13,7 +13,10 @@ from run_locomo_pilot import evaluation_query, raw_turns
 
 @pytest.fixture(scope="module")
 def corpus():
-    return mixed.build_units()
+    # Match the full-turn LME input used by these protocol regressions.
+    with pytest.MonkeyPatch.context() as environment:
+        environment.setenv("MEMORY_MAX_TURN_CHARS", "200000")
+        yield mixed.build_units()
 
 
 def test_full_history_and_no_gold_leakage(corpus):
@@ -148,5 +151,5 @@ def test_reuse_rejects_changed_baseline_implementation_before_any_calls(tmp_path
          'datasets':{'LoCoMo':{'sha256':'raw'}}}
     mixed.save(tmp_path/'manifest.json',old)
     mixed.save(tmp_path/'run.json',{'signature':'old'})
-    with pytest.raises(ValueError,match='implementation changed'):
+    with pytest.raises(ValueError,match=r'Baseline implementation/data changed:.*SimpleMem/main\.py'):
         mixed.prepare_baseline_reuse([], {**old,'source_sha256':{'SimpleMem/main.py':'new'}}, {'LoCoMo':tmp_path})

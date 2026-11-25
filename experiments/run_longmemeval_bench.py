@@ -46,33 +46,9 @@ def configure_environment(budget: float) -> None:
 
 async def run_unit(system: str, sample: dict, question: dict, attempt: Path,
                    budget: float, max_session: int, snapshots: Path | None) -> dict:
-    from run_locomo_pilot import run_memnexus, run_simplemem
-
-    ledger = attempt / "usage.json"
-    started = time.perf_counter()
-    questions = [sample["qa"][0]]
-    if system == "MemNexus":
-        stage, rows = await run_memnexus(
-            sample, questions, budget, usage_ledger=ledger, max_session=max_session,
-            snapshot_dir=snapshots, require_snapshot=False, resilient=True, answer_timeout=300.0,
-            resume=True,
-        )
-    else:
-        stage, rows = await asyncio.to_thread(
-            run_simplemem, sample, questions, budget, usage_ledger=ledger, max_session=max_session,
-            resume=True,
-        )
-    if len(rows) != 1:
-        raise ValueError(f"{system}/{sample.get('sample_id')}: {len(rows)} rows")
-    if not str(rows[0].get("prediction") or "").strip():
-        raise RuntimeError(f"{system}/{sample.get('sample_id')}: empty prediction is not a completed unit")
-    row = rows[0]
-    item = question
-    row.update(qa_index=item["qa_index"], category_id=0,
-               category=item["category"], gold_evidence=item["evidence"])
-    stage["elapsed_s"] = round(time.perf_counter() - started, 1)
-    write(attempt / "stage_result.json", {"stage": stage, "rows": rows})
-    return {"stage": stage, "rows": rows}
+    from run_parallel_bench import cohort_questions, run_unit as native_unit
+    return await native_unit(system, sample, cohort_questions(sample, [question]),
+                             [question], attempt, budget, max_session, snapshots)
 
 
 async def execute(args) -> dict:
@@ -84,7 +60,10 @@ async def execute(args) -> dict:
     if snapshots:
         snapshots.mkdir(parents=True, exist_ok=True)
 
-    order = {q["sample_index"]: q for q in cohort["questions"]}
+    order = {q["sample_index"]: q for q in cohort["questions"]
+             if not args.only_setting or q["setting"] == args.only_setting}
+    if not order:
+        raise ValueError("No cohort rows match the requested setting")
     indices = sorted(order)
     # Oracle units are minutes; S units are tens of minutes. Run all O units
     # first so the cheap half of the cohort is banked before the slow half.
@@ -241,8 +220,26 @@ def main() -> int:
     parser.add_argument("--collect", action="store_true")
     parser.add_argument("--unit-retries", type=int, default=3)
     parser.add_argument("--stagger", type=float, default=2.0)
-    parser.add_argument("--only-setting", default="")
+    parser.add_argument("--only-setting", choices=("", "S", "O"), default="")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--preflight", action="store_true", help="Check the frozen S-only paired experiment without paid calls")
+    mode.add_argument("--paired-run", action="store_true", help="Run the registered S-only paired experiment")
+    parser.add_argument("--limit-pairs", type=int)
+    parser.add_argument("--total-budget-rmb", type=float, default=0.0)
+    parser.add_argument("--freeze-manifest")
     args = parser.parse_args()
+
+    if not (args.preflight or args.paired_run) and (
+        args.freeze_manifest or args.limit_pairs is not None or args.total_budget_rmb
+    ):
+        parser.error("Paired budget and freeze options require --preflight or --paired-run")
+    if args.preflight or args.paired_run:
+        if args.collect or args.judge or args.snapshots or args.only_setting not in ("", "S"):
+            parser.error("Paired S mode builds both systems fresh and performs its own blind judging")
+        if not args.freeze_manifest or args.limit_pairs is None:
+            parser.error("Paired S mode requires --freeze-manifest and --limit-pairs")
+        from lme_paired_protocol import paired
+        return asyncio.run(paired(args))
 
     configure_environment(max(200.0, args.budget_per_question * 12))
     if args.collect:

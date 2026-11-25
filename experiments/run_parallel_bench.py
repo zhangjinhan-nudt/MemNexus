@@ -30,6 +30,24 @@ sys.path.insert(0, str(ROOT / "SimpleMem"))
 SYSTEMS = ("MemNexus", "SimpleMem")
 
 
+def category_metadata(item: dict) -> dict:
+    """Use official numeric LoCoMo ids, preserving legacy label discrepancies.
+
+    LongMemEval uses id 0 and retains its own category names. This changes
+    reporting only; neither category names nor gold data enter the model.
+    """
+    from locomo_cohort import CATEGORY_NAMES
+
+    if "category_id" not in item:
+        return {"category": item["category"]}
+    category_id = item["category_id"]
+    category = CATEGORY_NAMES.get(category_id, item["category"])
+    metadata = {"category_id": category_id, "category": category}
+    if category != item["category"]:
+        metadata["legacy_category"] = item["category"]
+    return metadata
+
+
 def resolve_systems(only_system: str) -> tuple[str, ...]:
     """决定本次执行哪些系统。
 
@@ -49,6 +67,35 @@ def read(path: Path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def read_selected_samples(path: Path, indices: set[int]) -> dict[int, dict]:
+    """Stream the dataset array, retaining only the original cohort indices.
+
+    Loading the complete long-history corpus in every parallel process wastes
+    gigabytes before even a small oracle pilot starts. Source indices and data
+    stay unchanged; this is a bounded-memory reader, not a new dataset split.
+    """
+    decoder = json.JSONDecoder()
+    result, buffer, index = {}, "", 0
+    with path.open(encoding="utf-8") as handle:
+        if handle.read(1) != "[":
+            raise ValueError("Benchmark dataset must be a JSON array")
+        while indices - result.keys():
+            buffer = buffer.lstrip(" \r\n\t,")
+            try:
+                sample, end = decoder.raw_decode(buffer)
+            except json.JSONDecodeError:
+                chunk = handle.read(1 << 20)
+                if not chunk:
+                    raise ValueError(f"Dataset ended before cohort indices {sorted(indices - result.keys())}")
+                buffer += chunk
+                continue
+            if index in indices:
+                result[index] = sample
+            index += 1
+            buffer = buffer[end:]
+    return result
+
+
 def write(path: Path, value) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -60,12 +107,21 @@ def configure_environment(budget: float) -> None:
     os.environ["EXPERIMENT_COMPONENT_BUDGET_RMB"] = str(budget)
     os.environ["MEMORY_INPUT_PRICE_RMB_PER_MILLION_TOKENS"] = "2.4"
     os.environ["MEMORY_OUTPUT_PRICE_RMB_PER_MILLION_TOKENS"] = "9.6"
-    os.environ["EXPERIMENT_TRUNCATION_MAX_TOKENS"] = "8192"
+    # Default 8192 preserves the LoCoMo setting. LongMemEval haystacks can need
+    # more room before the bounded recovery gives up, so an explicit environment
+    # value wins (setdefault, not overwrite).
+    os.environ.setdefault("EXPERIMENT_TRUNCATION_MAX_TOKENS", "8192")
     os.environ.setdefault("MEMORY_MODEL_TIMEOUT", "180")
 
 
 def cohort_questions(sample: dict, items: list[dict]) -> list[dict]:
     """Carry the cohort identity into raw QA objects for safe checkpointing."""
+    for item in items:
+        qa = sample["qa"][item["qa_index"]]
+        # LME's adapted QA uses LoCoMo's generic lookup id internally; its
+        # cohort deliberately uses id 0 with native LME question-type labels.
+        if item["category_id"] != 0 and qa["category"] != item["category_id"]:
+            raise ValueError("Cohort category id disagrees with the original dataset")
     return [
         {**sample["qa"][item["qa_index"]], "qa_index": item["qa_index"]}
         for item in items
@@ -74,7 +130,7 @@ def cohort_questions(sample: dict, items: list[dict]) -> list[dict]:
 
 async def run_unit(system: str, sample: dict, questions: list[dict], items: list[dict],
                    attempt: Path, budget: float, max_session: int,
-                   snapshots: Path | None) -> dict:
+                   snapshots: Path | None, require_snapshots: bool = False) -> dict:
     from run_locomo_pilot import run_memnexus, run_simplemem
 
     ledger = attempt / "usage.json"
@@ -82,7 +138,7 @@ async def run_unit(system: str, sample: dict, questions: list[dict], items: list
     if system == "MemNexus":
         stage, rows = await run_memnexus(
             sample, questions, budget, usage_ledger=ledger, max_session=max_session,
-            snapshot_dir=snapshots, require_snapshot=False, resilient=True, answer_timeout=300.0,
+            snapshot_dir=snapshots, require_snapshot=require_snapshots, resilient=True, answer_timeout=300.0,
             resume=True,
         )
     else:
@@ -95,8 +151,8 @@ async def run_unit(system: str, sample: dict, questions: list[dict], items: list
     if any(not str(row.get("prediction") or "").strip() for row in rows):
         raise RuntimeError(f"{system}/{sample.get('sample_id')}: empty predictions are not a completed unit")
     for row, item in zip(rows, items, strict=True):
-        row.update(qa_index=item["qa_index"], category_id=item["category_id"],
-                   category=item["category"], gold_evidence=item["evidence"])
+        row.update(qa_index=item["qa_index"], **category_metadata(item),
+                   gold_evidence=item["evidence"])
     stage["elapsed_s"] = round(time.perf_counter() - started, 1)
     write(attempt / "stage_result.json", {"stage": stage, "rows": rows})
     return {"stage": stage, "rows": rows}
@@ -108,7 +164,9 @@ async def execute(args) -> dict:
     CATEGORY_NAMES.update({1: "multi-hop", 2: "temporal", 3: "open-domain",
                            4: "single-hop", 5: "adversarial"})
     cohort = read(ROOT / args.cohort)
-    dataset = read(ROOT / cohort["dataset"])
+    dataset = read_selected_samples(
+        ROOT / cohort["dataset"], {q.get("sample_index", 0) for q in cohort["questions"]}
+    )
     out = ROOT / args.out
     out.mkdir(parents=True, exist_ok=True)
     snapshots = ROOT / args.snapshots if args.snapshots else None
@@ -130,13 +188,21 @@ async def execute(args) -> dict:
     done = Counter()
     # 只执行选中的系统；未选中的系统若有已完成单元，会在下方收集阶段被复用。
     active_systems = resolve_systems(args.only_system)
-
-    async def one(index: int) -> None:
-        items = sorted(groups[index], key=lambda item: item["qa_index"])
+    # Validate every reused MemNexus unit before dispatching either system.
+    # A complete old quotes-only result must not bypass the row-level resume gate.
+    from run_locomo_pilot import validate_completed_qa_history
+    for index in indices:
         sample = dataset[index]
-        questions = [sample["qa"][item["qa_index"]] for item in items]
-        # Stagger conversation starts: the provider rejects a simultaneous burst
-        # with HTTP 429, which would fail every unit at once.
+        old = out / "attempts" / f"{sample.get('sample_id')}_memnexus" / "stage_result.json"
+        if old.exists():
+            validate_completed_qa_history(read(old), "events" if sample.get("dataset") == "LongMemEval-S" else "quotes")
+    if args.require_snapshots and "MemNexus" in active_systems:
+        from agent_memory.snapshot import available
+        missing = [dataset[index]["sample_id"] for index in indices
+                   if not available(snapshots, dataset[index]["sample_id"])]
+        if missing:
+            raise FileNotFoundError(f"Required frozen memory snapshots missing: {missing}")
+
     async def run_unit_with_retries(system, sample, questions, items, attempt) -> str:
         """Run one conversation x system unit, retrying transient failures.
 
@@ -149,7 +215,8 @@ async def execute(args) -> dict:
             async with gate:
                 try:
                     result = await run_unit(system, sample, questions, items, attempt,
-                                            args.budget_per_conversation, cohort["max_session"], snapshots)
+                                            args.budget_per_conversation, cohort["max_session"], snapshots,
+                                            args.require_snapshots)
                     write(attempt / "ok.json", {"rows": len(result["rows"])})
                     return (f"{len(result['rows'])} questions "
                             f"RMB {result['stage'].get('total_usage', {}).get('cost_rmb', 0):.3f}")
@@ -202,7 +269,7 @@ async def execute(args) -> dict:
         "cohort": args.cohort,
         "selection_sha256": cohort["selection_sha256"],
         "max_session": cohort["max_session"],
-        "questions": len(cohort["questions"]) if not limit else sum(len(groups[i]) for i in indices),
+        "questions": sum(len(groups[i]) for i in indices),
         "systems": dict(done),
         "only_system": args.only_system or None,
         "active_systems": list(active_systems),
@@ -232,8 +299,28 @@ def collect_run_rows(out: Path, dataset: list[dict], indices: list[int],
         for system in SYSTEMS:
             path = out / "attempts" / f"{sample_id}_{system.lower()}" / "stage_result.json"
             if not path.exists():
+                if system in active_systems:
+                    failure_path = path.with_name("failure.json")
+                    failure = read(failure_path) if failure_path.exists() else {}
+                    for item in groups[index]:
+                        qa = dataset[index]["qa"][item["qa_index"]]
+                        rows.append({
+                            "system": system, "sample_id": sample_id,
+                            "qa_index": item["qa_index"], **category_metadata(item),
+                            "question": qa["question"],
+                            "gold_answer": qa.get("answer", ""), "prediction": "",
+                            "error": failure.get("error", "Missing completed unit"),
+                            "forced_abstain": True, "f1": 0.0, "bleu1": 0.0,
+                            "judge_result": "WRONG", "model_calls": {},
+                            "latency_ms": None, "unit_failed": True,
+                        })
                 continue
-            unit_rows = read(path)["rows"]
+            completed = read(path)
+            if system == "MemNexus":
+                from run_locomo_pilot import validate_completed_qa_history
+                validate_completed_qa_history(
+                    completed, "events" if dataset[index].get("dataset") == "LongMemEval-S" else "quotes")
+            unit_rows = completed["rows"]
             if system not in active_systems:
                 actual_keys = {(row.get("sample_id"), row.get("qa_index")) for row in unit_rows}
                 if actual_keys != expected_keys:
@@ -244,7 +331,7 @@ def collect_run_rows(out: Path, dataset: list[dict], indices: list[int],
                         f"复用基线必须来自同一 cohort，请检查 --out 目录。"
                     )
                 reused_systems[system] += 1
-            rows += unit_rows
+            rows += [{**row, **category_metadata(row)} for row in unit_rows]
     return rows, reused_systems
 
 
@@ -255,7 +342,7 @@ def collect(args) -> dict:
     units = 0
     for path in sorted((out / "attempts").glob("*/stage_result.json")):
         payload = read(path)
-        rows += payload["rows"]
+        rows += [{**row, **category_metadata(row)} for row in payload["rows"]]
         units += 1
     write(out / "rows.json", rows)
     summary = {"units": units, "rows": len(rows),
@@ -266,10 +353,11 @@ def collect(args) -> dict:
 
 def judge(args) -> dict:
     """Blind grading with the paper's single user message, in a bounded pool."""
+    from concurrent.futures import ThreadPoolExecutor
+
     import benchmark100 as bench
     import config
-    from concurrent.futures import ThreadPoolExecutor
-    from simplemem.core.utils.llm_client import LLMClient
+    from simplemem.core.utils.llm_client import BudgetExceededError, LLMClient
 
     out = ROOT / args.out
     rows = read(out / "rows.json")
@@ -277,6 +365,9 @@ def judge(args) -> dict:
     folder.mkdir(parents=True, exist_ok=True)
 
     def one(row: dict) -> dict:
+        if row.get("error") or row.get("unit_failed"):
+            return {"judge_result": "WRONG", "judge_reason": "Execution failed; counted in the fixed denominator",
+                    "sample_id": row["sample_id"], "qa_index": row["qa_index"], "system": row["system"]}
         key = hashlib.sha256(
             f"{row['sample_id']}|{row['qa_index']}|{row['system']}|{row['prediction']}".encode()
         ).hexdigest()[:20]
@@ -287,16 +378,26 @@ def judge(args) -> dict:
                            model=config.JUDGE_MODEL, base_url=config.JUDGE_BASE_URL,
                            enable_thinking=False, use_streaming=False)
         client.ledger_path = str(folder / f"{key}.usage.json")
+        if args.judge_budget_per_question is not None:
+            client.cost_limit_rmb = args.judge_budget_per_question
+            # A failed or interrupted grading attempt still consumed budget.
+            # Resume its ledger rather than granting the same row a new cap.
+            if Path(client.ledger_path).exists():
+                client.usage.update(read(Path(client.ledger_path)))
         payload = json.dumps({k: row[k] for k in ("question", "gold_answer", "prediction")},
                              ensure_ascii=False)
         messages = [{"role": "user", "content": bench.JUDGE_INSTRUCTION + "\n" + payload}]
         try:
-            raw = client.chat_completion(messages, response_format={"type": "json_object"}, max_retries=2)
+            if args.judge_budget_per_question is not None and client.usage.get("reserved_rmb", 0):
+                raise RuntimeError("Unsettled prior judge reservation; reconcile it before resuming")
+            options = {"_output_limit": args.judge_max_tokens} if args.judge_max_tokens else {}
+            raw = client.chat_completion(messages, response_format={"type": "json_object"},
+                                         max_retries=2, **options)
             verdict = bench.parse_judgment(raw)
             value = {"judge_result": verdict["label"], "judge_reason": verdict["reason"],
                      "sample_id": row["sample_id"], "qa_index": row["qa_index"],
                      "system": row["system"]}
-        except Exception as error:
+        except (Exception, BudgetExceededError) as error:
             value = {"judge_result": "error", "judge_reason": f"{type(error).__name__}: {error}",
                      "sample_id": row["sample_id"], "qa_index": row["qa_index"],
                      "system": row["system"]}
@@ -321,11 +422,17 @@ def main() -> int:
     parser.add_argument("--cohort", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--snapshots", default="")
+    parser.add_argument("--require-snapshots", action="store_true",
+                        help="Preflight all MemNexus snapshots; forbid rebuilding missing memory bases.")
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--limit-conversations", type=int, default=0)
     parser.add_argument("--budget-per-conversation", type=float, default=60.0)
     parser.add_argument("--judge", action="store_true")
     parser.add_argument("--judge-workers", type=int, default=6)
+    parser.add_argument("--judge-budget-per-question", type=float, default=None,
+                        help="Optional per-row judge cost cap, including failed attempts and resume.")
+    parser.add_argument("--judge-max-tokens", type=int, default=None,
+                        help="Optional fixed judge output limit; no automatic length expansion.")
     parser.add_argument("--only-sample", default="")
     parser.add_argument("--only-system", default="",
                         help="只执行指定系统（MemNexus 或 SimpleMem）；留空=两者都跑。"
@@ -334,6 +441,12 @@ def main() -> int:
     parser.add_argument("--unit-retries", type=int, default=3)
     parser.add_argument("--stagger", type=float, default=6.0)
     args = parser.parse_args()
+    if args.require_snapshots and not args.snapshots:
+        parser.error("--require-snapshots needs --snapshots")
+    if args.judge_budget_per_question is not None and not (0 < args.judge_budget_per_question < float("inf")):
+        parser.error("--judge-budget-per-question must be finite and positive")
+    if args.judge_max_tokens is not None and args.judge_max_tokens <= 0:
+        parser.error("--judge-max-tokens must be positive")
 
     configure_environment(max(200.0, args.budget_per_conversation * 12))
     if args.collect:

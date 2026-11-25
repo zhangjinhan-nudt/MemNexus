@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from .evidence_policy import explicit_persistence_request, question_only
+from .evidence_policy import assertion_supported, explicit_persistence_request, listed_label_supported
 from .models import (
     AnswerContext,
     AnswerResponse,
@@ -214,6 +214,7 @@ class SQLiteStore:
         run_events: list[dict],
         expected_version: tuple[int, int] | None = None,
         expected_valid_until: datetime | None = None,
+        source_revisions: dict[str, int] | None = None,
     ) -> str:
         """Retain up to 200 unbound receipts per owner; bound snapshots live in turns.
 
@@ -226,6 +227,9 @@ class SQLiteStore:
         answer_id = new_id("answer")
         with self.transaction():
             self.get_session(scope, session_id)
+            for sid, revision in (source_revisions or {}).items():
+                if self.get_session(scope, sid).revision != revision:
+                    raise ConflictError("Authorized source changed before answer receipt could be saved; retry")
             if (
                 expected_version is not None
                 and self.generation_version(scope, session_id) != expected_version
@@ -395,7 +399,8 @@ class SQLiteStore:
                 )
             }
 
-    def _check_evidence(self, scope: Scope, session: Session, item: Candidate, new_ids: set[str] | None):
+    def _check_evidence(self, scope: Scope, session: Session, item: Candidate, new_ids: set[str] | None,
+                        *, member_value: str | None = None):
         if item.scope_type == "project" and not session.project_id:
             raise ValueError("Project memory requires a project session")
         if item.valid_from and item.valid_to and item.valid_from >= item.valid_to:
@@ -413,22 +418,31 @@ class SQLiteStore:
             turn = Turn.model_validate_json(row["body"])
             if ref.event_index >= len(turn.events) or ref.quote not in turn.events[ref.event_index].content:
                 raise ValueError("Evidence quote/index does not match source")
+            text = turn.events[ref.event_index].content
+            if ref.start is not None:
+                if text[ref.start:ref.end] != ref.quote:
+                    raise ValueError("Evidence positions do not match source")
+            else:
+                start = text.index(ref.quote)
+                # Only backfill a unique literal occurrence; overlapping matches
+                # count too. A repeated quote does not specify its context.
+                if text.find(ref.quote, start + 1) < 0:
+                    ref.start, ref.end = start, start + len(ref.quote)
             roles.append(turn.events[ref.event_index].role)
+            label = listed_label_supported(text, ref.quote, item.predicate,
+                                           member_value if member_value is not None else item.value,
+                                           start=ref.start, end=ref.end)
             factual_sources.append(
                 (turn.events[ref.event_index].role != "assistant" or allow_assistant)
-                and not question_only(turn.events[ref.event_index].content)
+                and (assertion_supported(text, ref.quote, start=ref.start, end=ref.end) or label)
             )
         if new_ids is not None and not any(e.turn_id in new_ids for e in item.evidence):
             raise ValueError("New memories must cite at least one pending turn")
         allow_assistant = os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
         if item.assertion in {"stated", "observed"} and set(roles) == {"assistant"} and not allow_assistant:
             raise ValueError("Assistant output alone cannot establish a user or observed fact")
-        if item.assertion in {"stated", "observed"} and all(
-            question_only(ref.quote) for ref in item.evidence
-        ):
-            raise ValueError("Questions alone cannot establish affirmative facts")
         if item.assertion in {"stated", "observed"} and not any(factual_sources):
-            raise ValueError("Questions and assistant replies cannot establish affirmative facts")
+            raise ValueError("Questions, assistant replies, and quotes missing their source qualification cannot establish affirmative facts")
 
     def _save_memory(self, scope: Scope, memory: Memory):
         previous = self._db.execute(
@@ -499,7 +513,8 @@ class SQLiteStore:
     ) -> Memory:
         self._check_evidence(scope, session, item, new_ids)
         for member in item.semantics.members:
-            self._check_evidence(scope, session, item.model_copy(update={"evidence": member.evidence}), new_ids)
+            self._check_evidence(scope, session, item.model_copy(update={"evidence": member.evidence}), new_ids,
+                                 member_value=member.value)
         scope_id = {"user": scope.owner_id, "project": session.project_id, "session": session.session_id}[
             item.scope_type
         ]
@@ -532,10 +547,13 @@ class SQLiteStore:
             ):
                 merged = list(
                     {
-                        (e.turn_id, e.event_index, e.quote): e for e in existing.evidence + item.evidence
+                        (e.turn_id, e.event_index, e.quote, e.start, e.end): e
+                        for e in existing.evidence + item.evidence
                     }.values()
                 )
-                updated = existing.model_copy(update={"evidence": merged[-30:]})
+                if len(merged) > 30:
+                    continue  # Keep another record rather than lose an original source.
+                updated = existing.model_copy(update={"evidence": merged})
                 self._save_memory(scope, updated)
                 self._record(scope, "merge_evidence", updated, existing)
                 return updated
@@ -573,7 +591,8 @@ class SQLiteStore:
             return [self._add_candidate(scope, session, item) for item in candidates]
 
     def commit_extraction(
-        self, scope: Scope, session: Session, new_turns: list[Turn], result: ExtractionResult
+        self, scope: Scope, session: Session, new_turns: list[Turn], result: ExtractionResult,
+        *, allow_direct_long_term: bool = True,
     ) -> list[Memory]:
         with self.transaction():
             latest = self.get_session(scope, session.session_id)
@@ -597,7 +616,7 @@ class SQLiteStore:
                     latest,
                     c,
                     {t.turn_id for t in new_turns},
-                    direct_long_term=explicit_long_term_request,
+                    direct_long_term=allow_direct_long_term and explicit_long_term_request,
                 )
                 for c in result.candidates
             ]
@@ -802,11 +821,13 @@ class SQLiteStore:
                             )
                         evidence = list(
                             {
-                                (e.turn_id, e.event_index, e.quote): e
+                                (e.turn_id, e.event_index, e.quote, e.start, e.end): e
                                 for e in target.evidence + source.evidence
                             }.values()
                         )
-                        result = target.model_copy(update={"evidence": evidence[-30:]})
+                        if len(evidence) > 30:
+                            raise ValueError("Merge exceeds source capacity; retain both records")
+                        result = target.model_copy(update={"evidence": evidence})
                     elif data.action == "correct":
                         old = target.model_copy(update={"status": "retracted"})
                         self._save_memory(scope, old)
@@ -933,7 +954,7 @@ class SQLiteStore:
                         if relation == "merge":
                             combined = list(
                                 {
-                                    (e.turn_id, e.event_index, e.quote): e
+                                    (e.turn_id, e.event_index, e.quote, e.start, e.end): e
                                     for e in target.evidence + source.evidence
                                 }.values()
                             )

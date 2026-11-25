@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-25",
+  "old_reports_archived": 138,
+  "test_cache_directories_archived": 449,
+  "one_off_analysis_scripts_archived": 61,
+  "archive_location": "../MemNexus-archive-20261125",
+  "permanent_deletions": 0,
+  "reason": "Bulk recursive deletion was blocked by automatic approval; reversible move used instead.",
+  "preserved": [
+    "all paid experiment raw data and ledgers",
+    "existing memory databases and indices",
+    "recent 20261123-25 runs including failed candidates",
+    "formal regression tests",
+    "local literature and paper drafts"
+  ]
+}

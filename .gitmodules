@@ -1,0 +1,3 @@
+[submodule "SimpleMem"]
+	path = SimpleMem
+	url = https://github.com/aiming-lab/SimpleMem.git

@@ -42,6 +42,22 @@ class Settings:
     pending_turns: int = 5
     context_turns: int = 15
     window_token_limit: int = field(default_factory=lambda: _positive_int("MEMORY_WINDOW_TOKEN_LIMIT", 6000))
+    # Admission limit for a single turn, decoupled from the short-term window:
+    # how much text we accept per turn is an input-validation question, while
+    # window_token_limit governs how much context the window keeps. LongMemEval-S
+    # contains utterances far above the old window-derived ceiling (~4.2k), and
+    # rejecting them would fail the whole question rather than degrade one turn.
+    max_turn_chars: int = field(default_factory=lambda: _positive_int("MEMORY_MAX_TURN_CHARS", 6000))
+    # Ablation switch for the short->long promotion pipeline (see LongTermMemory).
+    promotion_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_PROMOTION_ENABLED", "true").lower() in {"1", "true", "yes"}
+    )
+    # Long-history benchmarks can produce a session summary larger than a short
+    # chat window allows. Default False keeps the strict contract (raise); set
+    # MEMORY_STATE_CLAMP=true to truncate instead of failing the whole question.
+    state_clamp_enabled: bool = field(
+        default_factory=lambda: os.getenv("MEMORY_STATE_CLAMP", "false").lower() in {"1", "true", "yes"}
+    )
     prompt_token_limit: int = field(default_factory=lambda: _positive_int("MEMORY_PROMPT_TOKEN_LIMIT", 10000))
     complex_prompt_token_limit: int = field(
         default_factory=lambda: _positive_int("MEMORY_COMPLEX_PROMPT_TOKEN_LIMIT", 22000)
@@ -49,64 +65,6 @@ class Settings:
     retrieval_token_limit: int = 3000
     max_top_k: int = 20
     max_candidates: int = 120
-    collection_queries_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_COLLECTION_QUERIES", "true").lower() in {"1", "true", "yes"}
-    )
-    answer_synthesis_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_ANSWER_SYNTHESIS", "true").lower() in {"1", "true", "yes"}
-    )
-    semantic_execution_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_SEMANTIC_EXECUTION", "false").lower() in {"1", "true", "yes"}
-    )
-    semantic_execution_complex_only: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_SEMANTIC_COMPLEX_ONLY", "true").lower() in {"1", "true", "yes"}
-    )
-    premise_retrieval_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_PREMISE_RETRIEVAL", "true").lower() in {"1", "true", "yes"}
-    )
-    reread_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_REREAD_ENABLED", "true").lower() in {"1", "true", "yes"}
-    )
-    open_domain_compat: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_OPEN_DOMAIN_COMPAT", "true").lower() in {"1", "true", "yes"}
-    )
-    # One-call query bridge: paraphrases the question into retrieval terms the
-    # original phrasing does not contain. Off by default so the baseline run
-    # never picks it up; A/B decides whether it earns its call.
-    llm_bridge_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_LLM_BRIDGE", "false").lower() in {"1", "true", "yes"}
-    )
-    llm_bridge_max_terms: int = field(
-        default_factory=lambda: _positive_int("MEMORY_LLM_BRIDGE_MAX_TERMS", 4)
-    )
-    # The typed negative gate may only declare "absent" when it has examined
-    # the whole memory store, not the retrieved subgraph. Off by default: the
-    # A/B measures the false-abstention rate before it can be trusted.
-    negative_gate_full_scan_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_GATE_FULL_SCAN", "false").lower() in {"1", "true", "yes"}
-    )
-    # Reader fallback: when the contract pipeline still abstains after bounded
-    # inference, one free-reading call proposes an answer whose supporting
-    # quote is verified verbatim against the cited sources. Off by default;
-    # A/B decides whether verified-quote reading earns its call.
-    llm_reader_fallback_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_LLM_READER_FALLBACK", "false").lower() in {"1", "true", "yes"}
-    )
-    # Reader hint: one free-reading call before synthesis whose verified
-    # proposal is offered to the contract synthesiser as a hint (append-only
-    # prompt enrichment; the contract still decides). Off by default.
-    llm_reader_hint_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_LLM_READER_HINT", "false").lower() in {"1", "true", "yes"}
-    )
-    # Measured on 42 paired questions: an unconstrained subject-keyed sweep
-    # added 8 unrelated facts about the same person and lowered three questions
-    # without fixing any. Default off until the sweep is predicate-constrained.
-    subject_recall_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_SUBJECT_RECALL", "false").lower() in {"1", "true", "yes"}
-    )
-    subject_recall_limit: int = field(
-        default_factory=lambda: _positive_int("MEMORY_SUBJECT_RECALL_LIMIT", 8)
-    )
     # Indexed-sweep quota: caps how many ranked hits the indexed sweep may add
     # per question. Measured on the 1000-question run: indexed_sweep items take
     # 64.4% of retrieved characters with a 1.0% hit rate, while the offline
@@ -116,25 +74,11 @@ class Settings:
     indexed_sweep_limit: int = field(
         default_factory=lambda: _non_negative_int("MEMORY_INDEXED_SWEEP_LIMIT", 32)
     )
-    bounded_inference_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_BOUNDED_INFERENCE", "false").lower() in {"1", "true", "yes"}
-    )
-    # Temporal rescue: when a date-seeking question still abstains on a
-    # non-adversarial route, deterministically extract the best-corroborated
-    # date span from the grounded evidence (subject overlap + proximity +
-    # occurred_at agreement; the quote is the verbatim event text). Zero model
-    # calls. Off by default; A/B decides.
-    temporal_rescue_enabled: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_TEMPORAL_RESCUE", "false").lower() in {"1", "true", "yes"}
-    )
     answer_normalize_enabled: bool = field(
         default_factory=lambda: os.getenv("MEMORY_ANSWER_NORMALIZE", "true").lower() in {"1", "true", "yes"}
     )
     allow_assistant_evidence: bool = field(
-        default_factory=lambda: os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "false").lower() in {"1", "true", "yes"}
-    )
-    semantic_max_answer_calls: int = field(
-        default_factory=lambda: _positive_int("MEMORY_SEMANTIC_MAX_ANSWER_CALLS", 2)
+        default_factory=lambda: os.getenv("MEMORY_ALLOW_ASSISTANT_EVIDENCE", "true").lower() in {"1", "true", "yes"}
     )
     evidence_grounding_enabled: bool = field(
         default_factory=lambda: os.getenv("MEMORY_GROUNDING_ENABLED", "true").lower() in {"1", "true", "yes"}
@@ -143,9 +87,6 @@ class Settings:
         default_factory=lambda: (
             os.getenv("MEMORY_GROUNDING_SEMANTIC", "false").lower() in {"1", "true", "yes"}
         )
-    )
-    grounding_max_raw_sources: int = field(
-        default_factory=lambda: _positive_int("MEMORY_GROUNDING_RAW_LIMIT", 3)
     )
     activation_ttl_seconds: int = 300
     maintenance_interval: float = field(
@@ -177,14 +118,12 @@ class Settings:
         for name in (
             "pending_turns",
             "window_token_limit",
+            "max_turn_chars",
             "prompt_token_limit",
             "complex_prompt_token_limit",
             "retrieval_token_limit",
             "max_top_k",
             "max_candidates",
-            "grounding_max_raw_sources",
-            "semantic_max_answer_calls",
-            "subject_recall_limit",
             "activation_ttl_seconds",
             "model_max_tokens",
             "inference_cache_max_entries",

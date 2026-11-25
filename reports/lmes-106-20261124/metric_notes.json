@@ -1,0 +1,12 @@
+[
+  {
+    "sample_id": "26bdc477_S",
+    "gold": "five",
+    "mn": "5",
+    "sm": "Five trips",
+    "both_judge": "CORRECT",
+    "mn_token_f1": 0.0,
+    "sm_token_f1": 0.6666666666666666,
+    "interpretation": "Official-style lexical normalization does not map digits to number words. Preserve the metric; do not infer a semantic error or change answer spelling to match gold."
+  }
+]

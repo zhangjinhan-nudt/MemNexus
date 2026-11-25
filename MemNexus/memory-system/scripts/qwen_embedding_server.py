@@ -1,15 +1,18 @@
 """Local OpenAI-compatible Qwen3 embedding service for MemNexus experiments."""
 
 import argparse
+import logging
 from functools import lru_cache
 from typing import Literal
 
+import torch
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "Qwen/Qwen3-Embedding-0.6B"
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingRequest(BaseModel):
@@ -21,7 +24,14 @@ class EmbeddingRequest(BaseModel):
 
 @lru_cache(maxsize=1)
 def get_model() -> SentenceTransformer:
-    return SentenceTransformer(MODEL_NAME, trust_remote_code=True)
+    # The default CUDA efficient-SDPA backend produced changing vectors for
+    # identical inputs on the audited environment. Keep weights/prompts intact
+    # and select attention on this model, not a process-wide backend context.
+    return SentenceTransformer(
+        MODEL_NAME,
+        trust_remote_code=True,
+        model_kwargs={"attn_implementation": "eager", "dtype": torch.float32},
+    ).eval()
 
 
 app = FastAPI(title="Local Qwen3 Embeddings", version="1.0")
@@ -30,7 +40,15 @@ app = FastAPI(title="Local Qwen3 Embeddings", version="1.0")
 @app.get("/health")
 def health():
     model = get_model()
-    return {"status": "ok", "model": MODEL_NAME, "dimension": model.get_sentence_embedding_dimension()}
+    return {
+        "status": "ok",
+        "readiness": "model_loaded_only",
+        "model": MODEL_NAME,
+        "dimension": model.get_sentence_embedding_dimension(),
+        "device": str(model.device),
+        "dtype": str(next(model.parameters()).dtype),
+        "attention_implementation": model[0].auto_model.config._attn_implementation,
+    }
 
 
 @app.post("/v1/embeddings")
@@ -46,6 +64,7 @@ def embeddings(request: EmbeddingRequest):
             kwargs["prompt_name"] = "query"
         vectors = get_model().encode(texts, **kwargs)
     except Exception as error:
+        logger.exception("Embedding inference failed")
         raise HTTPException(status_code=500, detail="embedding generation failed") from error
     return {
         "object": "list",

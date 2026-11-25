@@ -1,0 +1,110 @@
+{
+  "blocks": {
+    "candidate": {
+      "before": {
+        "n": 15,
+        "f1": 45.90474563327962,
+        "bleu1": 41.09215856966877,
+        "cost_rmb": 0.2823552,
+        "input_tokens": 99712,
+        "output_tokens": 4484,
+        "calls": 16,
+        "errors": 0,
+        "correct": 11,
+        "accuracy": 73.33333333333333
+      },
+      "after": {
+        "n": 15,
+        "f1": 51.920784304782245,
+        "bleu1": 47.687006811863824,
+        "cost_rmb": 0.2701032,
+        "input_tokens": 92579,
+        "output_tokens": 4991,
+        "calls": 15,
+        "errors": 0,
+        "correct": 13,
+        "accuracy": 86.66666666666667
+      },
+      "gains": [
+        "95228167_S",
+        "0a34ad58_S"
+      ],
+      "losses": [],
+      "controls_before": {
+        "n": 12,
+        "f1": 56.81596029018709,
+        "bleu1": 51.365013373421185,
+        "cost_rmb": 0.22775279999999998,
+        "input_tokens": 81401,
+        "output_tokens": 3374,
+        "calls": 13,
+        "errors": 0,
+        "correct": 10,
+        "accuracy": 83.33333333333333
+      },
+      "controls_after": {
+        "n": 12,
+        "f1": 61.87757747142689,
+        "bleu1": 58.03483741918247,
+        "cost_rmb": 0.2125128,
+        "input_tokens": 74187,
+        "output_tokens": 3590,
+        "calls": 12,
+        "errors": 0,
+        "correct": 11,
+        "accuracy": 91.66666666666667
+      },
+      "locomo_before": {
+        "n": 5,
+        "f1": 88.02616738100609,
+        "bleu1": 81.68333333333334,
+        "cost_rmb": 0.0887904,
+        "input_tokens": 30968,
+        "output_tokens": 1507,
+        "calls": 5,
+        "errors": 0
+      },
+      "locomo_after": {
+        "n": 5,
+        "f1": 82.03426454699799,
+        "bleu1": 75.95430107526882,
+        "cost_rmb": 0.08896799999999999,
+        "input_tokens": 30854,
+        "output_tokens": 1554,
+        "calls": 5,
+        "errors": 0
+      },
+      "same_reader_input": {
+        "gpt4_f2262a51_S": false,
+        "2ce6a0f2_S": false,
+        "95228167_S": false,
+        "01493427_S": false,
+        "1f2b8d4f_S": false,
+        "18dcd5a5_S": true,
+        "06f04340_S": false,
+        "0862e8bf_abs_S": false,
+        "0bc8ad93_S": false,
+        "0e4e4c46_S": false,
+        "27016adc_S": false,
+        "1903aded_S": false,
+        "0a34ad58_S": false,
+        "15745da0_abs_S": false,
+        "4dfccbf8_S": false
+      },
+      "mechanism_source_comparison": "must remain identical",
+      "provisional_quality_pass": false
+    }
+  },
+  "budget": {
+    "limit_rmb": 5.0,
+    "settled_rmb": 0.770136,
+    "reserved_rmb": 0.0,
+    "available_rmb": 4.229864,
+    "native_metered_normalized_rmb": 0.770136,
+    "native_explicit_unknown_upper_rmb": 0.0,
+    "counts": {
+      "completed": 47
+    }
+  },
+  "note": "Block-specific paired cohorts; fixed planner, native reader/recall. Generation costs exclude cached planner. No pooled six-system accuracy comparison."
+}

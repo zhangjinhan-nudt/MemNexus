@@ -1,0 +1,41 @@
+{
+  "status": "completed_accepted_query_transfer_and_dialogue_parent",
+  "adopted": [
+    "existing_planner_query_transfer",
+    "assistant_discourse_parent_priority"
+  ],
+  "retained_previous_fix": "independent_clause_scope",
+  "not_adopted": [
+    "lexical_normalization",
+    "single_query_missing_contract_fallback",
+    "query_read_scoring_fallback",
+    "event_qualification_bundle"
+  ],
+  "production_files_changed_this_turn": [
+    "grounding.py"
+  ],
+  "tests": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "1661",
+    "time": "21.525",
+    "timestamp": "2026-11-25T17:53:12.405945+08:00",
+    "hostname": "LAPTOP-FLKQ1AGE"
+  },
+  "budget": {
+    "limit_rmb": 50,
+    "accounted_rmb": 2.5181712,
+    "unknown_upper_included_rmb": 0.3780768,
+    "remaining_authorization_not_account_balance": 47.4818288,
+    "reserved_rmb": 0
+  },
+  "frozen_for_large_benchmark": false,
+  "limitations": [
+    "Exposed development cases; fresh plan confirmation only five questions",
+    "Art classification remains wrong despite restored evidence",
+    "Fresh-plan doctor membership varies with fully visible sources",
+    "No new SimpleMem evaluation; all cost comparisons within MN"
+  ]
+}

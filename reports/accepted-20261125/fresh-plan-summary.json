@@ -1,0 +1,56 @@
+{
+  "baseline": {
+    "n": 5,
+    "correct": 3,
+    "f1": 47.70975056689342,
+    "answers": {
+      "0bc8ad93_S": {
+        "judgement": "WRONG",
+        "prediction": "Yes, the user visited the Science Museum with a friend (a chemistry professor) on a behind-the-scenes tour."
+      },
+      "0e4e4c46_S": {
+        "judgement": "CORRECT",
+        "prediction": "132 points"
+      },
+      "1903aded_S": {
+        "judgement": "CORRECT",
+        "prediction": "Transcriptionist"
+      },
+      "95228167_S": {
+        "judgement": "WRONG",
+        "prediction": "Set a budget and decide between acoustic, electric, or classical based on the music you love; since you value music's expressive and social power, choose a guitar whose tone and style inspire you to play and share it. Prioritize comfort and playability: check neck shape, fretboard width, body size, and weight so the guitar suits your hands and posture for long practice sessions. Play several guitars in the store, including the one you plan to buy, and listen for tone and resonance; ask staff to demonstrate and compare models. Check build quality and setup: inspect the neck relief, action, intonation, tuning stability, and any fret buzz; ask whether a professional setup is included. Consider accessories and future needs: a case or gig bag, strap, tuner, picks, and strings; if you plan to perform or record, factor in amplification or pickup options."
+      },
+      "gpt4_f2262a51_S": {
+        "judgement": "CORRECT",
+        "prediction": "3 doctor"
+      }
+    }
+  },
+  "candidate": {
+    "n": 5,
+    "correct": 3,
+    "f1": 52.89795918367347,
+    "answers": {
+      "0bc8ad93_S": {
+        "judgement": "WRONG",
+        "prediction": "Yes, with a friend (a chemistry professor)"
+      },
+      "0e4e4c46_S": {
+        "judgement": "CORRECT",
+        "prediction": "132 points"
+      },
+      "1903aded_S": {
+        "judgement": "CORRECT",
+        "prediction": "Transcriptionist"
+      },
+      "95228167_S": {
+        "judgement": "CORRECT",
+        "prediction": "Try both the Stratocaster and Les Paul before buying to see which feels and sounds more like home. If you favor clean, crisp rhythms and leads and want a versatile guitar with a wide range of tonal options, lean toward the Stratocaster. If you favor heavier, more aggressive music or a warmer, fuller tone with plenty of sustain, lean toward the Les Paul. Check neck feel and body comfort: the Les Paul has a thicker, more substantial neck profile and more angular body, which suits some players but may take getting used to."
+      },
+      "gpt4_f2262a51_S": {
+        "judgement": "WRONG",
+        "prediction": "2 doctor"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "python": "3.13.3",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "packages": {
+    "pytest": "8.4.2",
+    "pydantic": "2.12.0",
+    "fastapi": "0.115.0",
+    "httpx": "0.28.1",
+    "numpy": "2.2.6",
+    "matplotlib": "3.10.7",
+    "torch": "2.7.1+cu128",
+    "transformers": "4.57.0",
+    "sentence-transformers": "5.1.1",
+    "lancedb": "0.25.3",
+    "openai": "2.3.0"
+  },
+  "note": "System Python used for both passing suites. The minimal backend .venv lacks numpy/matplotlib and must not be used for benchmark runner tests. Provider models/config are frozen per experiment."
+}

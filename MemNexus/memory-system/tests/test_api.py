@@ -1,5 +1,6 @@
 """HTTP boundary checks using the fixed local-development principal."""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -127,7 +128,17 @@ class ApiTests(unittest.TestCase):
             if "用户意图感知查询规划" in prompt:
                 return '{"route":"short","semantic_queries":["报告语言"],"depth":1}'
             if "Return one concise answer table" in prompt:
-                return '{"slots":[{"target":"这次报告使用什么语言？","values":[{"value":"这次报告使用中文。","supports":[{"source_id":1,"quote":"这次报告使用中文。"}]}]}]}'
+                data, _ = json.JSONDecoder().raw_decode(prompt[prompt.index('{"question":'):])
+                self.assertEqual(data["question"], "这次报告使用什么语言？")
+                matching = [source["source_id"] for source in data["sources"]
+                            if any(event["role"] == "user" and "这次报告使用中文。" in event["text"]
+                                   for event in source["source_events"])]
+                self.assertTrue(matching, "The actual source catalog must retain the user's statement")
+                selected = matching[0]
+                return json.dumps({"slots": [{"target": "这次报告使用什么语言？",
+                    "derivation": "用户明确说明这次报告使用中文。",
+                    "values": [{"value": "这次报告使用中文。", "supports": [
+                        {"source_id": selected, "quote": "这次报告使用中文。"}]}]}]})
             return "这次报告使用中文。"
 
         model = CallableModel(chat)

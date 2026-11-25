@@ -29,11 +29,12 @@ from .models import (
     RetrievalChannel,
     SearchResponse,
     Session,
+    normalize_request_contract,
     utcnow,
 )
 from .ports import Embedder, MemoryModel
 from .providers import ModelOutputError
-from .reasoning import apply_route, classify_question
+from .reasoning import apply_route, bind_plan_entities, classify_question
 from .retrieval_projection import RetrievalProjection
 from .settings import Settings
 
@@ -117,6 +118,7 @@ class _Match:
     support: tuple[str, ...] = ()
     rank_score: float | None = None
     conflict_pending: list[dict] = field(default_factory=list)
+    channel_ranks: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -169,6 +171,8 @@ class Retriever:
         projection_scope: str = "default",
         projection_generation: int | None = None,
         progress=None,
+        reasoning_time: datetime | None = None,
+        known_speakers: list[str] | None = None,
     ) -> SearchResponse:
         """Read-only search. TimeoutError means the shared query deadline expired.
 
@@ -201,7 +205,9 @@ class Retriever:
                 await asyncio.to_thread(
                     self.projection.sync, projection_scope, short + long, _terms, generation
                 )
-                return await self._search(query, session, short, long, top_k, plan, progress)
+                return await self._search(
+                    query, session, short, long, top_k, plan, progress, reasoning_time, known_speakers
+                )
         finally:
             self._projection_context.reset(token)
 
@@ -310,10 +316,43 @@ class Retriever:
         top_k: int | None,
         plan: QueryPlan,
         progress=None,
+        reasoning_time: datetime | None = None,
+        known_speakers: list[str] | None = None,
     ) -> SearchResponse:
         warnings: list[str] = []
         steps: list[QueryStep] = []
         now = utcnow()
+        # The catalog describes available relations, not current factual truth.
+        # Excluding expired relations here prevents the planner from ever asking
+        # for them. Rank before bounding; storage order is not query relevance.
+        catalog_memories = [m for m in short + long if self._eligible(
+            m, session, QueryPlan(temporal_mode="history"), now)]
+        distinct_relations = {
+            (m.subject, m.predicate, m.semantics.cardinality, m.semantics.event_key)
+            for m in catalog_memories
+        }
+        if len(distinct_relations) > 60:
+            # A field label can differ from the question's vocabulary. Reuse
+            # the existing content-vector index for directory selection rather
+            # than treating shared names/verbs as semantic relevance. These
+            # document vectors are reused by the subsequent normal retrieval.
+            if self.embedder and self.model and self.settings.planner_mode != "rule":
+                namespace, generation = self._projection_context.get()
+                vectors, reused = await self._projected_vectors(
+                    [query], catalog_memories, namespace, generation)
+                scores = [_cosine(vectors[0], v) for v in vectors[1:]]
+                warnings.append(f"relation_catalog_vectors: reused={reused}; documents={len(catalog_memories)}")
+            else:
+                scores = self._bm25(_terms(query), [
+                    " ".join((m.subject, m.predicate, m.value, m.content)) for m in catalog_memories])
+            # Python's stable ordering preserves source order for equal scores;
+            # alphabetical field names and random UUIDs must not decide coverage.
+            catalog_memories = [m for _, m in sorted(zip(scores, catalog_memories),
+                                                     key=lambda item: -item[0])]
+        relation_catalog = list(dict.fromkeys(
+            (m.subject, m.predicate, m.semantics.cardinality, m.semantics.event_key)
+            for m in catalog_memories
+        ))[:60]
         # "rule" removes the planning call entirely. The deterministic planner
         # already handles intent, list/count/negative shape and time filters;
         # the provider plan only adds semantic query variants. Which of the two
@@ -336,14 +375,13 @@ class Retriever:
                         "topic": session.topic,
                         "goal": session.goal,
                         "summary": session.summary[:2000],
-                        "query_time": now.isoformat(),
+                        # Question reference is for relative-time planning only.
+                        # Lifecycle eligibility continues to use the wall clock.
+                        "query_time": (reasoning_time or now).isoformat(),
                         "short_memory": [
                             m.content for m in short if self._eligible(m, session, QueryPlan(), now)
                         ][-8:],
-                        "relation_catalog": list(dict.fromkeys(
-                            (m.subject, m.predicate, m.semantics.cardinality, m.semantics.event_key)
-                            for m in short + long if self._eligible(m, session, QueryPlan(), now)
-                        ))[:60],
+                        "relation_catalog": relation_catalog,
                     },
                 )
                 plan = QueryPlan.model_validate(plan)
@@ -355,39 +393,19 @@ class Retriever:
         elif self.model is None:
             warnings.append("rule_planner: semantic intent and evidence sufficiency are not verified")
 
-        # Optional one-call bridge (MEMORY_LLM_BRIDGE=1). Failure degrades to
-        # the flag-off behaviour: empty terms, no new warnings level, no error.
-        if self.settings.llm_bridge_enabled and self.model is not None:
-            from .llm_bridge import bridge_terms
-            try:
-                bridge = await bridge_terms(
-                    self.model, query, list(plan.keywords), list(plan.semantic_queries),
-                    limit=self.settings.llm_bridge_max_terms,
-                )
-            except Exception as error:  # timeout / malformed output / provider down
-                bridge = []
-                warnings.append(f"llm_bridge_error:{type(error).__name__}")
-            if bridge:
-                # QueryPlan.semantic_queries is capped at 3 by the contract;
-                # overflow bridge terms must go into keywords, otherwise the
-                # plan fails schema validation and the whole answer aborts.
-                slots = max(0, 3 - len(plan.semantic_queries))
-                queries = list(plan.semantic_queries) + bridge[:slots]
-                keywords = list(dict.fromkeys([
-                    *plan.keywords, *bridge[slots:],
-                ]))[:30]
-                plan = plan.model_copy(update={
-                    "semantic_queries": queries,
-                    "keywords": keywords,
-                })
-                warnings.append("llm_bridge:" + "|".join(bridge))
-
         # The provider plan supplies semantic detail; this deterministic route
         # decides the retrieval policy from the question form. It cannot grant
         # access or establish truth, but it prevents list/count/negative queries
         # from being treated as ordinary top-k fact lookups.
-        known_entities = [memory.subject for memory in short + long if memory.subject]
-        question_route = classify_question(query, known_entities)
+        # Subjects in extracted memories can be categories, roles or objects.
+        # Only source speaker identities authorize this literal identity hint;
+        # topic names stay in the unmodified semantic/lexical query.
+        question_route = classify_question(query, known_speakers or [])
+        plan, rebound_fields = bind_plan_entities(query, plan, known_speakers or [])
+        if rebound_fields:
+            warnings.append("query_entity_binding: discarded conflicting " + ",".join(rebound_fields))
+        plan, contract_notes = normalize_request_contract(query, plan, relation_catalog)
+        warnings.extend(contract_notes)
         plan = apply_route(plan, question_route)
         warnings.append(f"question_route:{question_route.kind};recall_policy:{question_route.recall_policy}")
 
@@ -468,7 +486,9 @@ class Retriever:
                 query, plan, session, long, remaining, now, warnings
             )
             channels.extend(channel.model_copy(update={"tier": "long"}) for channel in long_channels)
-            pool = self._merge(stm + ltm)
+            # Tier quotas bound recall work; neither tier gets to occupy all
+            # early positions merely because it was retrieved first.
+            pool = self._interleave([stm, ltm], candidate_cap)
             steps.append(
                 QueryStep(
                     order=len(steps) + 1,
@@ -524,6 +544,10 @@ class Retriever:
         overrides = self._local_overrides(pool, plan)
         if overrides:
             warnings.append("local_override: session/project exception does not change long-term facts")
+        # Internal answer candidates keep the channel-rank union order. A local
+        # exception still precedes the corresponding durable value, but raw
+        # cross-channel scores and age decay do not discard semantic candidates.
+        pool = sorted(pool, key=lambda hit: hit.memory.memory_id not in overrides)
         for hit in pool:
             hit.rank_score = self._rank_score(hit, plan, now)
         ranked = sorted(
@@ -566,6 +590,12 @@ class Retriever:
                     candidate.revision,
                 ) in selected_ids
         conflicts = self._pending_conflicts(selected, short + long, session, plan, now)
+        # Answer candidates can outlive public top-k selection. Carry their
+        # pending alternatives too, without changing public selected warnings
+        # or spending that response's bounded conflict-summary allocation.
+        self._pending_conflicts(
+            [hit for hit in pool if hit not in selected], short + long, session, plan, now,
+        )
         if conflicts:
             warnings.append(
                 "pending_conflict_requires_confirmation: " + json.dumps(conflicts, ensure_ascii=False)
@@ -594,6 +624,7 @@ class Retriever:
             warnings.append("semantic_cosine_threshold_0.35_requires_development_set_calibration")
         return SearchResponse(
             results=[self._hit(hit, overrides) for hit in selected],
+            candidates=[self._hit(hit, overrides, rank) for rank, hit in enumerate(pool, 1)],
             plan=plan,
             mode="hybrid" if self.embedder else "lexical_baseline",
             candidate_count=len(pool),
@@ -655,7 +686,7 @@ class Retriever:
             "query": query,
             "subject": plan.subject,
             "predicate": plan.predicate,
-            "semantic_queries": plan.semantic_queries or [query],
+            "semantic_queries": self._semantic_queries(query, plan),
             "keywords": plan.keywords,
             "required_info": plan.required_info,
             "temporal_mode": plan.temporal_mode,
@@ -761,14 +792,24 @@ class Retriever:
         lexical_eligible = by_view["lexical"].inspected if "lexical" in by_view else []
         if "lexical" in by_view:
             warnings.append(f"fts5_projection: reranked={len(lexical_eligible)}; eligible={len(eligible)}")
+        ranked_channels = []
+        for view, recalled_view in zip(views, recalled):
+            channel_hits = sorted(
+                self._merge(recalled_view.matches),
+                key=lambda hit: (-hit.score, hit.memory.memory_id, -hit.memory.version),
+            )
+            for rank, hit in enumerate(channel_hits, 1):
+                hit.channel_ranks[f"{hit.memory.tier}.{view}"] = rank
+            ranked_channels.append(channel_hits)
         matches = {
             (hit.memory.memory_id, hit.memory.version): hit
-            for hit in self._merge([hit for result in recalled for hit in result.matches])
+            for hit in self._merge([hit for channel in ranked_channels for hit in channel])
         }
         semantic_used = "semantic" in by_view
-        result = sorted(
-            matches.values(), key=lambda hit: (-hit.score, hit.memory.memory_id, -hit.memory.version)
-        )[:limit]
+        # BM25, cosine and exact-match scores are not calibrated probabilities.
+        # Use their within-channel ranks for the bounded union; leave the
+        # existing public search reranker and its scores intact.
+        result = self._interleave(ranked_channels, limit)
         channels = [
             RetrievalChannel(
                 view="lexical",
@@ -801,6 +842,7 @@ class Retriever:
         for channel in channels:
             channel.elapsed_ms = by_view[channel.view].elapsed_ms if channel.view in by_view else 0.0
             channel.query_conditions = dict(conditions)
+            channel.query_conditions["candidate_merge"] = "stable_channel_rank_interleave"
             if channel.view == "lexical":
                 channel.query_conditions["lexical_terms"] = sorted(terms)
             if channel.view == "semantic":
@@ -896,10 +938,13 @@ class Retriever:
             eligible, matches, {(h.memory.memory_id, h.memory.version): 1.0 for h in matches}
         )
 
+    @staticmethod
+    def _semantic_queries(query, plan):
+        # Preserve the original request alongside every bounded planner rewrite.
+        return list(dict.fromkeys(text.strip() for text in [query, *plan.semantic_queries] if text.strip()))
+
     async def _semantic_recall(self, query, plan, eligible, namespace, generation):
-        queries = list(dict.fromkeys(text.strip() for text in plan.semantic_queries if text.strip())) or [
-            query
-        ]
+        queries = self._semantic_queries(query, plan)
         vectors, reused = await self._projected_vectors(queries, eligible, namespace, generation)
 
         def score_vectors():
@@ -973,7 +1018,7 @@ class Retriever:
         result = []
         for counter, length in zip(counters, lengths):
             score = 0.0
-            for term in terms & counter.keys():
+            for term in sorted(terms & counter.keys()):
                 inverse = math.log(1 + (len(counters) - frequencies[term] + 0.5) / (frequencies[term] + 0.5))
                 tf = counter[term]
                 score += inverse * (tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * length / average))
@@ -1016,7 +1061,10 @@ class Retriever:
             return name in query.casefold()
 
         frontier = [(name, ()) for name in sorted(edges) if mentioned(name)]
-        found = {(h.memory.memory_id, h.memory.version): h for h in pool}
+        # Work on private matches: expansion annotates the dependency of a
+        # candidate, not the stored memory or another retrieval view.
+        direct = cls._merge(pool)
+        found = {(h.memory.memory_id, h.memory.version): h for h in direct}
         by_id = {m.memory_id: m for m in eligible}
         visited = set()
         terms = _terms(query + " " + " ".join(plan.required_info))
@@ -1040,27 +1088,12 @@ class Retriever:
                             _Match(memory, min(0.95, 0.6 + relevance * 0.3), {"entity_link"}, support)
                         )
             frontier = following
-        for hit in sorted(additions, key=lambda h: (-h.score, len(h.support), h.memory.memory_id)):
+        linked = []
+        for rank, hit in enumerate(sorted(
+            additions, key=lambda h: (-h.score, len(h.support), h.memory.memory_id)
+        ), 1):
+            hit.channel_ranks[f"{hit.memory.tier}.entity_link"] = rank
             bundle = [by_id[mid] for mid in hit.support] + [hit.memory]
-            extra = sum((m.memory_id, m.version) not in found for m in bundle)
-            if len(found) + extra > cap:
-                protected = {mid for existing in found.values() for mid in existing.support}
-                protected.update(m.memory_id for m in bundle)
-                removable = sorted(
-                    (
-                        key
-                        for key, existing in found.items()
-                        if existing.memory.memory_id not in protected
-                        and existing.score < hit.score
-                        and not existing.support
-                    ),
-                    key=lambda key: (found[key].score, key),
-                )
-                required = len(found) + extra - cap
-                if len(removable) < required:
-                    continue
-                for key in removable[:required]:
-                    del found[key]
             for memory in bundle[:-1]:
                 key = (memory.memory_id, memory.version)
                 if key not in found:
@@ -1069,11 +1102,32 @@ class Retriever:
             if key not in found:
                 found[key] = hit
             else:
-                found[key].views.add("entity_link")
-                found[key].score = max(found[key].score, hit.score)
-                if not mentioned(hit.memory.subject.casefold().strip()):
-                    found[key].support = hit.support
-        return list(found.values())
+                existing = found[key]
+                existing.views.add("entity_link")
+                existing.score = max(existing.score, hit.score)
+                channel = f"{hit.memory.tier}.entity_link"
+                existing.channel_ranks.setdefault(channel, rank)
+                if (not mentioned(hit.memory.subject.casefold().strip())
+                        and (not existing.support or len(hit.support) < len(existing.support))):
+                    existing.support = hit.support
+            linked.append(found[key])
+        if not linked:
+            return direct[:cap]
+        # Entity-linked candidates share the same rank-based union rather than
+        # evicting cosine hits with an unrelated synthetic score. Admit a leaf
+        # only together with its evidence chain; the cap counts every support.
+        by_memory_id = {hit.memory.memory_id: hit for hit in found.values()}
+        order = cls._interleave([direct, linked], len(found))
+        selected: dict[tuple[str, int], _Match] = {}
+        for hit in order:
+            bundle = [by_memory_id[mid] for mid in hit.support] + [hit]
+            unseen = [item for item in bundle
+                      if (item.memory.memory_id, item.memory.version) not in selected]
+            if len(selected) + len(unseen) > cap:
+                continue
+            for item in unseen:
+                selected[item.memory.memory_id, item.memory.version] = item
+        return list(selected.values())
 
     @staticmethod
     def _rank_score(hit: _Match, plan: QueryPlan, now: datetime) -> float:
@@ -1128,11 +1182,47 @@ class Retriever:
         for hit in matches:
             key = (hit.memory.memory_id, hit.memory.version)
             if key not in unique:
-                unique[key] = _Match(hit.memory, hit.score, set(hit.views))
+                unique[key] = _Match(
+                    hit.memory, hit.score, set(hit.views), hit.support,
+                    hit.rank_score, list(hit.conflict_pending), dict(hit.channel_ranks),
+                )
             else:
-                unique[key].score = max(unique[key].score, hit.score)
-                unique[key].views.update(hit.views)
+                merged = unique[key]
+                merged.score = max(merged.score, hit.score)
+                merged.views.update(hit.views)
+                for channel, rank in hit.channel_ranks.items():
+                    merged.channel_ranks[channel] = min(rank, merged.channel_ranks.get(channel, rank))
+                if hit.support and (not merged.support or len(hit.support) < len(merged.support)):
+                    merged.support = hit.support
+                for conflict in hit.conflict_pending:
+                    if conflict not in merged.conflict_pending:
+                        merged.conflict_pending.append(conflict)
         return list(unique.values())
+
+    @classmethod
+    def _interleave(cls, channels: list[list[_Match]], limit: int) -> list[_Match]:
+        """Round-robin ranked channels, deduplicating without comparing scores.
+
+        Merge provenance before bounding so an item returned by multiple views
+        keeps all its ranks even when a lower occurrence is beyond the cap.
+        """
+        merged = {
+            (hit.memory.memory_id, hit.memory.version): hit
+            for hit in cls._merge([hit for channel in channels for hit in channel])
+        }
+        result, seen = [], set()
+        for rank in range(max((len(channel) for channel in channels), default=0)):
+            for channel in channels:
+                if len(result) >= limit:
+                    return result
+                if rank >= len(channel):
+                    continue
+                hit = channel[rank]
+                key = (hit.memory.memory_id, hit.memory.version)
+                if key not in seen:
+                    seen.add(key)
+                    result.append(merged[key])
+        return result
 
     @classmethod
     def _exact_short_answer(
@@ -1250,38 +1340,27 @@ class Retriever:
         )
 
     @staticmethod
-    def _hit(hit: _Match, overrides: set[str]) -> Hit:
+    def _hit(hit: _Match, overrides: set[str], retrieval_rank: int | None = None) -> Hit:
         memory = hit.memory
+        rank_metadata = {} if retrieval_rank is None else {
+            "retrieval_rank": retrieval_rank,
+            "retrieval_rank_stage": "candidate_union_before_public_selection",
+            "retrieval_channel_ranks": dict(hit.channel_ranks),
+        }
         return Hit(
             content=memory.content,
             score=hit.score,
             source_file=f"[memory:{memory.memory_id}]",
             chunk_id=f"{memory.memory_id}:{memory.version}",
             metadata={
-                "memory_id": memory.memory_id,
-                "version": memory.version,
-                "revision": memory.revision,
-                "tier": memory.tier,
-                "assertion": memory.assertion,
-                "kind": memory.kind,
-                "subject": memory.subject,
-                "predicate": memory.predicate,
-                "value": memory.value,
-                "durable": memory.durable,
-                "scope_type": memory.scope_type,
-                "scope_id": memory.scope_id,
-                "status": memory.status,
-                "valid_from": memory.valid_from.isoformat() if memory.valid_from else None,
-                "valid_to": memory.valid_to.isoformat() if memory.valid_to else None,
+                **memory.source_metadata(),
                 "matched_views": sorted(hit.views),
-                "hierarchy_path": list(memory.hierarchy_path),
                 "local_override": memory.memory_id in overrides,
                 "score_kind": "max_normalized_bm25_cosine_symbolic_hierarchy_entity_link",
                 "support_memory_ids": list(hit.support),
                 "rank_score": hit.rank_score if hit.rank_score is not None else hit.score,
                 "age_decay_applied": hit.rank_score is not None and hit.rank_score < hit.score,
                 "conflict_pending": hit.conflict_pending,
-                "recorded_at": memory.recorded_at.isoformat(),
-                "evidence": [e.model_dump(mode="json") for e in memory.evidence],
+                **rank_metadata,
             },
         )

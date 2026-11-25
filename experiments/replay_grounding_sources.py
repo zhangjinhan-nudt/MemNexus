@@ -52,7 +52,7 @@ def main():
                     unresolved += 1
         result = ground_evidence(recorded["question"], QueryPlan.model_validate(recorded["plan"]), hits,
                                  session_id="eval", current_turns=turns, resolved_turns=resolved,
-                                 blocked_events=set(), max_sources=20, raw_limit=3, budget=5000)
+                                 blocked_events=set(), max_sources=20, budget=5000)
         after = {e["turn_id"] for hit in result.sources for e in hit.metadata["source_events"]}
         gold = set(recorded["gold_evidence"])
         rows.append({"sample_id": recorded["sample_id"], "qa_index": recorded["qa_index"],

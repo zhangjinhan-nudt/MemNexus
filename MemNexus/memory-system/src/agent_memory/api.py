@@ -6,7 +6,7 @@ import os
 import secrets
 import time
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -33,6 +33,11 @@ class Query(Contract):
     top_k: int | None = Field(default=None, ge=0, le=100)
     timeout: float = Field(default=180.0, gt=0, le=180)
     accelerate: bool = True
+
+
+class AnswerQuery(Query):
+    source_session_ids: tuple[Annotated[str, Field(min_length=1,max_length=100)], ...] = ()
+    source_read_scope: Literal["quotes", "events"] = "quotes"
 
 
 def get_runtime(request: Request) -> MemoryRuntime:
@@ -186,14 +191,16 @@ def create_app(settings: Settings | None = None, runtime: MemoryRuntime | None =
         return await service.search(scope, body.session_id, body.query, body.top_k, body.timeout)
 
     @app.post("/api/v1/answer")
-    async def answer(body: Query, scope: ScopeDep, service: RuntimeDep):
+    async def answer(body: AnswerQuery, scope: ScopeDep, service: RuntimeDep):
         return await service.answer(
-            scope, body.session_id, body.query, body.top_k, body.timeout, accelerate=body.accelerate
+            scope, body.session_id, body.query, body.top_k, body.timeout, accelerate=body.accelerate,
+            source_session_ids=body.source_session_ids,
+            source_read_scope=body.source_read_scope,
         )
 
     @app.post("/api/v1/sessions/{session_id}/answer/stream")
     async def answer_stream(
-        session_id: str, body: Query, request: Request, scope: ScopeDep, service: RuntimeDep
+        session_id: str, body: AnswerQuery, request: Request, scope: ScopeDep, service: RuntimeDep
     ):
         if body.session_id != session_id:
             raise ValueError("Body session_id must match URL")
@@ -223,6 +230,8 @@ def create_app(settings: Settings | None = None, runtime: MemoryRuntime | None =
                         body.top_k,
                         body.timeout,
                         accelerate=body.accelerate,
+                        source_session_ids=body.source_session_ids,
+                        source_read_scope=body.source_read_scope,
                         progress=progress,
                     )
                     if result.answer_id:

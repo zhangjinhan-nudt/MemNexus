@@ -86,7 +86,7 @@ def test_typed_negative_gate_records_missing_support_without_proving_absence():
     )
     melanie = classify_question(
         "What type of individuals does the adoption agency Melanie is considering support? "
-        "Not mentioned in the conversation."
+        "Not mentioned in the conversation.", ["Melanie", "Caroline"]
     )
     assert typed_negative_gate(
         "What type of individuals does the adoption agency Melanie is considering support?",
@@ -153,22 +153,26 @@ def test_indexed_memory_retrieval_restores_the_second_subject_and_source():
             "evidence": [item.model_dump(mode="json") for item in memories[1].evidence],
         },
     )
-    extra = indexed_memory_hits(query, route, memories, [first])
+    plan = apply_route(QueryPlan(required_info=["John", "Maria", "homeless shelter"]), route)
+    extra = indexed_memory_hits(query, plan, memories, [first])
     assert len(extra) == 1 and extra[0].metadata["memory_id"] == "john"
     selected = ground_evidence(
         query,
-        apply_route(QueryPlan(required_info=["John", "Maria", "homeless shelter"]), route),
+        plan,
         [first, *extra],
         session_id="session",
         current_turns=list(turns.values()),
         resolved_turns=turns,
         blocked_events=set(),
         max_sources=8,
-        raw_limit=0,
         budget=5000,
     )
     selected_turns = {
         source["turn_id"] for hit in selected.sources for source in hit.metadata["source_events"]
     }
     assert selected_turns == {"john", "maria"}
-    assert selected.trace.indexed_sources_selected == 1
+    assert selected.trace.indexed_sources_selected <= 1
+    if not selected.trace.indexed_sources_selected:
+        assert any(decision["candidate_id"] == extra[0].chunk_id
+                   and decision["reason"] == "source_intervals_already_visible"
+                   for decision in selected.trace.selection_decisions)

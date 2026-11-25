@@ -216,7 +216,7 @@ def test_repeated_semantic_queries_are_encoded_once():
         retriever = Retriever(Settings(), Planner(semantic_queries=["时间", " 时间 ", ""]), embedder)
         try:
             await retriever.search("项目安排", Session(session_id="s"), [fact()], [])
-            assert embedder.inputs == [["时间", "项目截止日期是9月20日"]]
+            assert embedder.inputs == [["项目安排", "时间", "项目截止日期是9月20日"]]
         finally:
             retriever.close()
 

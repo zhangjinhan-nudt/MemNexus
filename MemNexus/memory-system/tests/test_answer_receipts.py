@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from agent_memory.models import AnswerContext, AnswerResponse, Event, Hit, Scope, TurnInput, utcnow
+from agent_memory.models import AnswerContext, AnswerResponse, Event, Hit, QueryPlan, Scope, TurnInput, utcnow
 from agent_memory.ports import ConflictError, NotFoundError
 from agent_memory.store import SQLiteStore
 
@@ -66,6 +66,43 @@ def test_snapshot_survives_refresh_and_excludes_prompt(setup):
     assert append(store, scope, session, receipt, answer.generated_text).turn_id == turn.turn_id
     with pytest.raises(ConflictError):
         append(store, scope, session, receipt, answer.generated_text, request="another")
+
+
+def test_legacy_answer_contract_and_ir_survive_receipt_read_and_turn_binding(setup):
+    store, scope, session = setup
+    answer = response()
+    answer.plan = QueryPlan.model_validate({"answer_contract": {"outputs": [{
+        "output_id": "hobbies", "question_span": "What are my hobbies?", "operator": "set",
+    }]}})
+    answer.reasoning = {"answer_ir": {"items": [{"value": "chess"}], "mode": "indexed"}}
+    answer.grounding.subject_recall_candidates = 3
+    answer.grounding.subject_recall_added = 2
+    answer_id = store.save_answer(scope, session, answer, [])
+    receipt = store.get_answer_receipt(scope, session, answer_id)
+    assert receipt.plan == answer.plan
+    assert receipt.reasoning == answer.reasoning
+    assert receipt.grounding == answer.grounding
+    append(store, scope, session, answer_id, answer.generated_text)
+    restored = store.turns(scope, session)[0].events[0].answer_context
+    assert restored.plan == answer.plan
+    assert restored.reasoning == answer.reasoning
+    assert restored.grounding == answer.grounding
+
+
+def test_same_call_derivation_survives_receipt_without_entering_conversation_prompt(setup):
+    store, scope, session = setup
+    answer = response("red")
+    summary = "The user named red in the cited source."
+    answer.reasoning = {"answer_table": {"slots": [{"target": "color", "derivation": summary,
+        "values": [{"value": "red", "supports": [{"source_id": 1, "quote": "red"}]}]}]}}
+    answer_id = store.save_answer(scope, session, answer, [])
+    assert store.get_answer_receipt(scope, session, answer_id).reasoning == answer.reasoning
+    appended = append(store, scope, session, answer_id, answer.generated_text)
+    restored = store.turns(scope, session)[0]
+    assert restored.events[0].answer_context.reasoning == answer.reasoning
+    assert restored == appended
+    assert summary not in str(restored.prompt_dump())
+    assert restored.prompt_dump()["events"][0]["content"] == "red"
 
 
 def test_forged_context_and_mismatched_body_rejected_without_consuming_receipt(setup):

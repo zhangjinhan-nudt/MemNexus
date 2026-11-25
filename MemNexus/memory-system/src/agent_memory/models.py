@@ -100,6 +100,18 @@ class Evidence(Contract):
     turn_id: str
     event_index: int = Field(ge=0)
     quote: str = Field(min_length=1, max_length=100000)
+    # Half-open positions in the original Python/Unicode string, never bytes or
+    # offsets into normalized text. Old quote-only records remain valid.
+    start: int | None = Field(default=None, ge=0, strict=True)
+    end: int | None = Field(default=None, gt=0, strict=True)
+
+    @model_validator(mode="after")
+    def paired_positions(self):
+        if (self.start is None) != (self.end is None):
+            raise ValueError("Evidence start and end must be supplied together")
+        if self.start is not None and self.end - self.start != len(self.quote):
+            raise ValueError("Evidence positions must span the exact quote length")
+        return self
 
 
 class FactMember(Contract):
@@ -163,6 +175,20 @@ class Memory(Candidate):
     supersedes: str | None = None
     recorded_at: datetime = Field(default_factory=utcnow)
 
+    def source_metadata(self) -> dict:
+        """A fresh, channel-independent fact projection; never retrieval policy.
+
+        Different recall paths must carry the same source semantics. JSON-mode
+        serialization also prevents a consumer from mutating stored members or
+        evidence through shared nested objects.
+        """
+        return self.model_dump(mode="json", include={
+            "memory_id", "version", "revision", "tier", "assertion", "kind",
+            "subject", "predicate", "value", "semantics", "durable", "scope_type",
+            "scope_id", "status", "valid_from", "valid_to", "hierarchy_path",
+            "recorded_at", "evidence",
+        })
+
 
 class EntityMemory(Contract):
     entity_id: str
@@ -192,6 +218,10 @@ class ReferenceFact(Contract):
     cardinality: Literal["unknown", "one", "many"] = "unknown"
     event_key: str | None = None
     event_identity: str | None = None
+    assertion: Literal["stated", "observed", "planned", "hypothetical", "inferred"] = "stated"
+    status: Literal["active", "superseded"] = "active"
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
 
 
 class ExtractionWindow(Contract):
@@ -236,11 +266,23 @@ class AnswerOutput(Contract):
 
     output_id: str = Field(min_length=1, max_length=40)
     question_span: str = Field(min_length=1, max_length=1000)
-    operator: Literal["direct", "set", "count", "time_point", "duration"] = "direct"
+    operator: Literal["direct", "set", "count", "sum", "time_point", "duration", "comparison"] = "direct"
     subjects: list[str] = Field(default_factory=list, max_length=8)
     subject_mode: Literal["single", "each", "joint", "common"] = "single"
     relation: str = Field(default="", max_length=200)
     qualifier: str = Field(default="", max_length=500)
+    count_unit: Literal["value", "entity", "event"] | None = None
+    # Positions of requested members within an enumerated answer/list, not
+    # event chronology or the ordinal of a whole list/session. Grounding
+    # intersects these hints with literal ordinals in question_span.
+    member_positions: list[Annotated[int, Field(ge=1)]] = Field(default_factory=list, max_length=20)
+    # Request-local, one-based catalog positions: retrieval suggestions, not
+    # proof that the corresponding facts satisfy the requested relation.
+    relation_refs: list[Annotated[int, Field(ge=1)]] = Field(default_factory=list, max_length=60)
+    # Internal compilation of catalog addresses; omitted from planner/reader
+    # wire schemas. These pairs aid recall/packing, never certify a fact.
+    retrieval_relations: list[tuple[str, str]] = Field(default_factory=list, max_length=60)
+    # Retained only for old receipts. New planning wire omits guessed premises.
     required_inputs: list[str] = Field(default_factory=list, max_length=6)
 
 
@@ -292,6 +334,8 @@ class QueryPlan(Contract):
         default_factory=list, max_length=12
     )
     collection_query: CollectionQuery | None = None
+    # One request interpretation, distinct from factual evidence and optimized
+    # retrieval hints. Missing/invalid contracts do not prevent ordinary QA.
     answer_contract: AnswerContract | None = None
 
     @field_validator("query_type", mode="before")
@@ -321,10 +365,141 @@ class QueryPlan(Contract):
         return value.astimezone(UTC) if value else None
 
 
-class CollectionQueryPlan(QueryPlan):
-    """A collection route must carry executable semantics, not an optional hint."""
+def normalize_request_contract(
+    question: str,
+    plan: QueryPlan,
+    relation_catalog: list | None = None,
+) -> tuple[QueryPlan, list[str]]:
+    """Anchor request spans and project bounded retrieval hints, without refusal.
 
-    collection_query: CollectionQuery
+    This checks addresses and representability, not natural-language entailment.
+    The original question remains the retrieval/reader input. In particular, a
+    real catalog reference does not establish that its relation qualifies.
+    Entity gates already reconciled by the caller are never overwritten here.
+    """
+    if plan.response_intent != "direct_answer" or plan.answer_contract is None:
+        return plan, []
+    notes = []
+    outputs = []
+    for output in plan.answer_contract.outputs:
+        span = output.question_span.strip()
+        if not span or span not in question:
+            notes.append(f"request_contract:unanchored_output:{output.output_id}")
+            continue
+        refs = list(dict.fromkeys(output.relation_refs))
+        relations = list(output.retrieval_relations)
+        if relation_catalog is not None:
+            valid = [ref for ref in refs if 1 <= ref <= len(relation_catalog)]
+            if valid != refs:
+                notes.append(f"request_contract:unknown_relation_ref:{output.output_id}")
+            refs = valid
+            # Recompile from this request's authorized catalog, overwriting
+            # any old or externally supplied projection. A reader-only repeat
+            # without the catalog retains the already compiled pairs.
+            relations = []
+            for ref in refs:
+                entry = relation_catalog[ref - 1]
+                if (isinstance(entry, (tuple, list)) and len(entry) >= 2
+                        and all(isinstance(value, str) and value.strip() for value in entry[:2])):
+                    pair = (entry[0], entry[1])
+                    if pair not in relations:
+                        relations.append(pair)
+        if output.required_inputs:
+            notes.append(f"request_contract:legacy_premises_omitted:{output.output_id}")
+        outputs.append(output.model_copy(deep=True, update={
+            "question_span": span, "relation_refs": refs, "retrieval_relations": relations, "required_inputs": [],
+        }))
+    if not outputs:
+        # Preserve the old retrieval plan when the interpretation is unusable;
+        # do not turn a malformed interpretation into a missing-evidence claim.
+        return plan.model_copy(deep=True, update={"answer_contract": None}), notes
+    if len(outputs) != len(plan.answer_contract.outputs):
+        # A valid address for one sub-request does not certify that the
+        # remaining contract represents the whole question. Keeping only
+        # surviving outputs narrows downstream entity/coverage bindings, and
+        # a second normalization used to erase the full-question fallback.
+        # Decline this optimization as a whole. Ordinary retrieval/synthesis
+        # still receive the original question; this is never a refusal.
+        notes.append("request_contract:partial_interpretation_omitted")
+        required = [question] if len(question) <= 500 else list(plan.required_info)
+        return plan.model_copy(deep=True, update={
+            "answer_contract": None, "collection_query": None, "required_info": required,
+        }), notes
+    required = list(dict.fromkeys(o.question_span for o in outputs if len(o.question_span) <= 500))
+    if any(len(o.question_span) > 500 for o in outputs):
+        notes.append("request_contract:long_span_not_truncated_for_retrieval")
+    collection = None
+    if len(outputs) == 1:
+        collection = _request_collection_projection(outputs[0], plan.collection_query, relation_catalog)
+    if plan.collection_query is not None and collection is None:
+        notes.append("request_contract:collection_optimization_not_representable")
+    update = {"answer_contract": AnswerContract(outputs=outputs), "collection_query": collection,
+              "required_info": required}
+    return plan.model_copy(deep=True, update=update), notes
+
+
+def _request_collection_projection(
+    output: AnswerOutput,
+    previous: CollectionQuery | None,
+    catalog: list | None,
+) -> CollectionQuery | None:
+    """Project only a representable set request; unknown is ordinary retrieval.
+
+    Rich existing collection hints may be retained only when the new request
+    describes the same scope. Their assertions/exclusions/category projection
+    must not be silently replaced by defaults.
+    """
+    if output.operator not in {"set", "count"}:
+        return None
+    if output.relation_refs and catalog is None and previous is None:
+        # Reader-side normalization has no catalog. An unresolved/multi-alias
+        # retrieval mapping must not become an exact partition on a later pass.
+        return None
+    subjects = list(dict.fromkeys(s.strip() for s in output.subjects if s.strip()))
+    if (not subjects or any(len(s) > 200 for s in subjects)
+            or len({s.casefold() for s in subjects}) != len(subjects)):
+        return None
+    if output.subject_mode == "single" and len(subjects) != 1:
+        return None
+    if output.subject_mode == "common":
+        if len(subjects) < 2:
+            return None
+        operation = "intersection"
+    elif output.subject_mode == "each" and output.operator == "set":
+        operation = "group"
+    else:
+        operation = "count" if output.operator == "count" else "union"
+    predicate = output.relation.strip()
+    if output.relation_refs and catalog is not None:
+        predicates = {predicate.strip() for _, predicate in output.retrieval_relations}
+        # A single symbolic partition cannot represent a disjunction of aliases.
+        if len(predicates) != 1:
+            return None
+        predicate = next(iter(predicates))
+    if not predicate or len(predicate) > 100:
+        return None
+    if previous is not None:
+        same_scope = (
+            [s.casefold() for s in previous.subjects] == [s.casefold() for s in subjects]
+            and (previous.predicate.casefold() == predicate.casefold()
+                 or (output.relation_refs and catalog is None))
+            and previous.operation == operation
+            and previous.qualifier.strip() == output.qualifier.strip()
+            and (output.count_unit is None or previous.count_unit == output.count_unit)
+        )
+        if same_scope:
+            return previous.model_copy(deep=True)
+        if (previous.qualifier or previous.event_key or previous.exclude_values
+                or previous.projection != "value" or previous.assertions != ["stated", "observed"]):
+            return None
+    # A nontrivial role/state/time qualifier cannot safely be reconstructed as
+    # exact predicate membership. Keep the original semantic retrieval instead.
+    if output.qualifier.strip() or output.count_unit is None:
+        return None
+    return CollectionQuery(
+        subjects=subjects, predicate=predicate, operation=operation,
+        count_unit=output.count_unit,
+    )
 
 
 class Hit(Contract):
@@ -393,6 +568,9 @@ class RetrievalBudget(Contract):
 
 class SearchResponse(Contract):
     results: list[Hit]
+    # Internal recall envelope. Public search still exposes its top-k view;
+    # answering budgets the attested source text, not a preselected summary.
+    candidates: list[Hit] = Field(default_factory=list, exclude=True)
     plan: QueryPlan
     mode: str
     candidate_count: int
@@ -431,21 +609,6 @@ class ModelCallTrace(Contract):
     errors: int = Field(default=0, ge=0)
 
 
-class BoundedInference(Contract):
-    """One explicitly-labelled inference, never promoted to an observed fact.
-
-    The gate that may request it is deterministic (empty answer, non-adversarial
-    question, subject present in the evidence). The contract keeps the premise
-    so a reader can reject the step without re-reading every source.
-    """
-
-    abstain: bool = False
-    answer: str = Field(default="", max_length=400)
-    basis: str = Field(default="", max_length=600)
-    confidence: Literal["high", "medium", "low"] = "low"
-    missing: str = Field(default="", max_length=300)
-
-
 class GroundingTrace(Contract):
     enabled: bool = False
     initial_sources: int = 0
@@ -467,8 +630,21 @@ class GroundingTrace(Contract):
     initial_missing_info: list[str] = Field(default_factory=list)
     final_missing_info: list[str] = Field(default_factory=list)
     coverage_measurement: str = "lexical_support_not_entailment"
+    binding_units_available: int = 0
+    binding_units_selected: int = 0
+    binding_unit_measurement: str = "visible_extraction_hints_not_qualified_set_completeness"
+    # Query catalog addresses supported by visible extraction hints. These
+    # counts measure locating coverage, not truth or answer completeness.
+    request_fields_available: int = 0
+    request_fields_selected: int = 0
+    selection_decisions: list[dict] = Field(default_factory=list)
     temporal_derivations: int = 0
+    # Legacy alias retained for older receipts/budget consumers. This value
+    # has always used serialized characters, never provider token usage.
     context_tokens_estimate: int = 0
+    context_serialized_chars: int = 0
+    context_budget_unit: str = "serialized_characters"
+    selection_coverage: str = "soft_locating_signals_not_answer_sufficiency"
     elapsed_ms: float = 0
 
 
@@ -532,13 +708,6 @@ class EvolutionInput(Contract):
         if value is not None and value.tzinfo is None:
             raise ValueError("effective_at must include timezone")
         return value.astimezone(UTC) if value else None
-
-
-class RelationProposal(Contract):
-    relation: Literal["duplicate", "update", "correction", "conflict", "unrelated"]
-    target_id: str | None = None
-    reason: str = Field(max_length=1000)
-    evidence_quotes: list[str] = Field(default_factory=list, max_length=10)
 
 
 class GroupSynthesis(Contract):

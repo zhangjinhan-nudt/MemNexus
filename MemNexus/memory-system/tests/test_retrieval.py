@@ -67,6 +67,50 @@ class TrackingRetriever(Retriever):
 
 
 class RetrievalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_catalog_uses_existing_semantic_vectors_for_nonliteral_relation(self):
+        query = "Which water sport does Rowan practice?"
+        target = memory("target", subject="Rowan", predicate="pastime", value="kayaking",
+                        content="Rowan kayaks each weekend.")
+        noise = [memory(str(i), subject="Rowan", predicate=f"detail{i}",
+                        content=f"Rowan owns decoration number {i}.") for i in range(70)]
+
+        class SemanticEncoder:
+            def __init__(self):
+                self.inputs = []
+
+            async def encode(self, texts):
+                self.inputs.extend(texts)
+                return [[1., 0.] if t in (query, target.content) else [0., 1.] for t in texts]
+
+        class Capture(Planner):
+            async def plan(self, query, context):
+                self.catalog = context["relation_catalog"]
+                return QueryPlan(semantic_queries=[query])
+
+        planner, encoder = Capture(), SemanticEncoder()
+        retriever = Retriever(Settings(planner_mode="model"), planner, encoder)
+        await retriever.search(query, SESSION, [], noise + [target])
+        self.assertEqual(planner.catalog[0][:2], ("Rowan", "pastime"))
+        for item in noise + [target]:
+            self.assertEqual(encoder.inputs.count(item.content), 1)
+        retriever.close()
+
+    async def test_catalog_ranks_relevant_historical_relation_before_bounding(self):
+        class Capture(Planner):
+            async def plan(self, query, context):
+                self.catalog = context["relation_catalog"]
+                return QueryPlan(temporal_mode="history")
+
+        planner = Capture()
+        noise = [memory(str(i), subject=f"unrelated{i}", predicate="color", value="blue")
+                 for i in range(70)]
+        historical = memory("last", subject="user", predicate="visited", value="Lisbon",
+                            valid_to=utcnow() - timedelta(days=100))
+        await Retriever(Settings(planner_mode="model"), planner).search(
+            "When did I visit Lisbon?", SESSION, [], noise + [historical])
+        self.assertIn(("user", "visited", "unknown", None), planner.catalog)
+        self.assertLessEqual(len(planner.catalog), 60)
+
     async def test_adaptive_planner_skips_only_unique_exact_current_lookup(self):
         planner = Planner()
         item = memory("exact", scope_type="session", scope_id="s1")
@@ -227,6 +271,34 @@ class RetrievalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([h.metadata["memory_id"] for h in current.results], ["current"])
         self.assertEqual({h.metadata["memory_id"] for h in history.results}, {"past", "current", "future"})
         self.assertEqual([h.metadata["memory_id"] for h in as_of.results], ["past"])
+
+    async def test_expired_long_event_is_recalled_only_for_authorized_history(self):
+        now = utcnow()
+        event = memory(
+            "past_event", session_id="older_session", scope_type="user", scope_id="owner",
+            tier="long", kind="event", subject="Morgan", predicate="role", value="coordinator",
+            content="Morgan was the project coordinator.",
+            valid_from=now - timedelta(days=3), valid_to=now - timedelta(days=1),
+        )
+        items = [
+            event,
+            event.model_copy(update={"memory_id": "archived", "status": "archived"}),
+            event.model_copy(update={"memory_id": "retracted", "status": "retracted"}),
+            event.model_copy(update={"memory_id": "private_session", "scope_type": "session",
+                                     "scope_id": "older_session"}),
+            event.model_copy(update={"memory_id": "other_project", "scope_type": "project",
+                                     "scope_id": "other_project"}),
+        ]
+        for fields, expected in (
+            ({}, []),
+            ({"temporal_mode": "history"}, ["past_event"]),
+            ({"as_of": now - timedelta(days=2)}, ["past_event"]),
+            ({"as_of": event.valid_to}, []),
+        ):
+            result = await Retriever(Settings(), Planner(route="long", **fields)).search(
+                "Morgan project coordinator role", SESSION, [], items
+            )
+            self.assertEqual([hit.metadata["memory_id"] for hit in result.results], expected)
 
     async def test_scopes_and_symbolic_filters_apply_before_recall(self):
         items = [

@@ -1,0 +1,445 @@
+{
+  "matched_pairs": 106,
+  "all": {
+    "MemNexus": {
+      "n": 106,
+      "types": {
+        "temporal-reasoning": {
+          "n": 17,
+          "accuracy": 88.23529411764706,
+          "f1": 48.00654533432357,
+          "bleu1": 41.68142317681863
+        },
+        "multi-session": {
+          "n": 19,
+          "accuracy": 73.6842105263158,
+          "f1": 52.16975014277194,
+          "bleu1": 44.40448197990315
+        },
+        "knowledge-update": {
+          "n": 19,
+          "accuracy": 84.21052631578948,
+          "f1": 57.960811118705855,
+          "bleu1": 55.571348089105115
+        },
+        "single-session-user": {
+          "n": 18,
+          "accuracy": 88.88888888888889,
+          "f1": 59.47646895015316,
+          "bleu1": 52.57831345729237
+        },
+        "single-session-assistant": {
+          "n": 18,
+          "accuracy": 100.0,
+          "f1": 82.79005998770836,
+          "bleu1": 74.81304071419657
+        },
+        "single-session-preference": {
+          "n": 15,
+          "accuracy": 80.0,
+          "f1": 17.802018711194172,
+          "bleu1": 12.406349164478923
+        }
+      },
+      "micro_accuracy": 85.84905660377359,
+      "macro_accuracy": 85.8364866414402,
+      "f1": 54.11716732265093,
+      "bleu1": 47.993062055387355,
+      "qa_input": 1061842,
+      "qa_output": 61108,
+      "qa_cost": 3.135057600000001,
+      "attempts": 230,
+      "latency_median_s": 9.663499999999999,
+      "latency_p95_s": 15.520999999999999,
+      "macro_f1": 53.034275707476176,
+      "macro_bleu1": 46.90915943029913
+    },
+    "SimpleMem": {
+      "n": 106,
+      "types": {
+        "temporal-reasoning": {
+          "n": 17,
+          "accuracy": 94.11764705882354,
+          "f1": 56.02423904552684,
+          "bleu1": 45.9458201174915
+        },
+        "multi-session": {
+          "n": 19,
+          "accuracy": 68.42105263157895,
+          "f1": 36.143140044068836,
+          "bleu1": 33.29248434630073
+        },
+        "knowledge-update": {
+          "n": 19,
+          "accuracy": 94.73684210526316,
+          "f1": 59.77506348215731,
+          "bleu1": 49.72950799645815
+        },
+        "single-session-user": {
+          "n": 18,
+          "accuracy": 94.44444444444444,
+          "f1": 65.2467166445661,
+          "bleu1": 58.25871081525944
+        },
+        "single-session-assistant": {
+          "n": 18,
+          "accuracy": 94.44444444444444,
+          "f1": 80.12914230019493,
+          "bleu1": 72.15751270852226
+        },
+        "single-session-preference": {
+          "n": 15,
+          "accuracy": 73.33333333333333,
+          "f1": 15.965216446366886,
+          "bleu1": 7.226281063990865
+        }
+      },
+      "micro_accuracy": 86.79245283018868,
+      "macro_accuracy": 86.58296066964799,
+      "f1": 53.12360036295712,
+      "bleu1": 45.41870788582743,
+      "qa_input": 1343342,
+      "qa_output": 88344,
+      "qa_cost": 4.072123200000001,
+      "attempts": 696,
+      "latency_median_s": 10.91006240004208,
+      "latency_p95_s": 16.28794537502108,
+      "macro_f1": 52.213919660480144,
+      "macro_bleu1": 44.43505284133716
+    }
+  },
+  "status": {
+    "status": "user_stopped",
+    "pairs": 106,
+    "note": "Incomplete components excluded from paired quality; paid usage retained"
+  },
+  "budget": {
+    "limit_rmb": 821.0,
+    "settled_rmb": 476.3918088,
+    "reserved_rmb": 60.8,
+    "available_rmb": 283.8081912,
+    "native_metered_normalized_rmb": 476.6447184,
+    "native_explicit_unknown_upper_rmb": 0.0,
+    "counts": {
+      "completed": 323,
+      "reserved": 8
+    }
+  },
+  "analysis_population": "All complete matched pairs pooled; no construction-cohort stratification",
+  "answerable": {
+    "MemNexus": {
+      "n": 98,
+      "types": {
+        "temporal-reasoning": {
+          "n": 16,
+          "accuracy": 93.75,
+          "f1": 50.19173702641445,
+          "bleu1": 43.616869268226935
+        },
+        "multi-session": {
+          "n": 16,
+          "accuracy": 75.0,
+          "f1": 56.30067567567568,
+          "bleu1": 49.31547619047618
+        },
+        "knowledge-update": {
+          "n": 19,
+          "accuracy": 84.21052631578948,
+          "f1": 57.960811118705855,
+          "bleu1": 55.571348089105115
+        },
+        "single-session-user": {
+          "n": 14,
+          "accuracy": 85.71428571428571,
+          "f1": 70.91836734693878,
+          "bleu1": 66.18131868131867
+        },
+        "single-session-assistant": {
+          "n": 18,
+          "accuracy": 100.0,
+          "f1": 82.79005998770836,
+          "bleu1": 74.81304071419657
+        },
+        "single-session-preference": {
+          "n": 15,
+          "accuracy": 80.0,
+          "f1": 17.802018711194172,
+          "bleu1": 12.406349164478923
+        }
+      },
+      "micro_accuracy": 86.73469387755102,
+      "macro_accuracy": 86.44580200501252,
+      "f1": 56.686148140741416,
+      "bleu1": 51.04124053972889,
+      "qa_input": 981232,
+      "qa_output": 57425,
+      "qa_cost": 2.906236800000001,
+      "attempts": 212,
+      "latency_median_s": 9.7985,
+      "latency_p95_s": 15.786749999999998
+    },
+    "SimpleMem": {
+      "n": 98,
+      "types": {
+        "temporal-reasoning": {
+          "n": 16,
+          "accuracy": 93.75,
+          "f1": 57.96325398587227,
+          "bleu1": 47.475510137200274
+        },
+        "multi-session": {
+          "n": 16,
+          "accuracy": 68.75,
+          "f1": 39.48529411764706,
+          "bleu1": 36.3241426919225
+        },
+        "knowledge-update": {
+          "n": 19,
+          "accuracy": 94.73684210526316,
+          "f1": 59.77506348215731,
+          "bleu1": 49.72950799645815
+        },
+        "single-session-user": {
+          "n": 14,
+          "accuracy": 92.85714285714286,
+          "f1": 74.87528344671202,
+          "bleu1": 69.18367346938776
+        },
+        "single-session-assistant": {
+          "n": 18,
+          "accuracy": 94.44444444444444,
+          "f1": 80.12914230019493,
+          "bleu1": 72.15751270852226
+        },
+        "single-session-preference": {
+          "n": 15,
+          "accuracy": 73.33333333333333,
+          "f1": 15.965216446366886,
+          "bleu1": 7.226281063990865
+        }
+      },
+      "micro_accuracy": 86.73469387755102,
+      "macro_accuracy": 86.3119604566973,
+      "f1": 55.35673216500284,
+      "bleu1": 47.565877249830216,
+      "qa_input": 1199350,
+      "qa_output": 80929,
+      "qa_cost": 3.655358400000001,
+      "attempts": 632,
+      "latency_median_s": 9.219321049982682,
+      "latency_p95_s": 16.489131905010435
+    }
+  },
+  "unanswerable": {
+    "MemNexus": {
+      "n": 8,
+      "types": {
+        "temporal-reasoning": {
+          "n": 1,
+          "accuracy": 0.0,
+          "f1": 13.043478260869565,
+          "bleu1": 10.714285714285714
+        },
+        "multi-session": {
+          "n": 3,
+          "accuracy": 66.66666666666667,
+          "f1": 30.138147300618694,
+          "bleu1": 18.212512856846995
+        },
+        "knowledge-update": {
+          "n": 0,
+          "accuracy": null,
+          "f1": null,
+          "bleu1": null
+        },
+        "single-session-user": {
+          "n": 4,
+          "accuracy": 100.0,
+          "f1": 19.429824561403507,
+          "bleu1": 4.967795173200299
+        },
+        "single-session-assistant": {
+          "n": 0,
+          "accuracy": null,
+          "f1": null,
+          "bleu1": null
+        },
+        "single-session-preference": {
+          "n": 0,
+          "accuracy": null,
+          "f1": null,
+          "bleu1": null
+        }
+      },
+      "micro_accuracy": 75.0,
+      "macro_accuracy": null,
+      "f1": 22.64715230104246,
+      "bleu1": 10.652875622203485,
+      "qa_input": 80610,
+      "qa_output": 3683,
+      "qa_cost": 0.2288207999999999,
+      "attempts": 18,
+      "latency_median_s": 8.46,
+      "latency_p95_s": 11.58315
+    },
+    "SimpleMem": {
+      "n": 8,
+      "types": {
+        "temporal-reasoning": {
+          "n": 1,
+          "accuracy": 100.0,
+          "f1": 25.0,
+          "bleu1": 21.470779802151025
+        },
+        "multi-session": {
+          "n": 3,
+          "accuracy": 66.66666666666667,
+          "f1": 18.31831831831832,
+          "bleu1": 17.123639836317977
+        },
+        "knowledge-update": {
+          "n": 0,
+          "accuracy": null,
+          "f1": null,
+          "bleu1": null
+        },
+        "single-session-user": {
+          "n": 4,
+          "accuracy": 100.0,
+          "f1": 31.546732837055416,
+          "bleu1": 20.02134152581037
+        },
+        "single-session-assistant": {
+          "n": 0,
+          "accuracy": null,
+          "f1": null,
+          "bleu1": null
+        },
+        "single-session-preference": {
+          "n": 0,
+          "accuracy": null,
+          "f1": null,
+          "bleu1": null
+        }
+      },
+      "micro_accuracy": 87.5,
+      "macro_accuracy": null,
+      "f1": 25.767735787897077,
+      "bleu1": 19.115883176793304,
+      "qa_input": 143992,
+      "qa_output": 7415,
+      "qa_cost": 0.4167647999999999,
+      "attempts": 64,
+      "latency_median_s": 13.540159550029784,
+      "latency_p95_s": 15.536199694906827
+    }
+  },
+  "measured_build": {
+    "MemNexus": {
+      "n": 44,
+      "input_tokens": 31516661,
+      "output_tokens": 8559936,
+      "normalized_rmb": 157.815372,
+      "total_build_seconds": 29805.159635200514,
+      "provider_attempts": 5626
+    },
+    "SimpleMem": {
+      "n": 44,
+      "input_tokens": 22640258,
+      "output_tokens": 25296591,
+      "normalized_rmb": 297.1838928,
+      "total_build_seconds": 78324.15108789969,
+      "provider_attempts": 4342
+    }
+  },
+  "provider_billing_estimate": {
+    "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "rates_rmb_per_million_offpeak": {
+      "cache_hit": 0.02,
+      "cache_miss": 1,
+      "output": 4
+    },
+    "peak_multiplier": 2,
+    "measurement": "Estimate from provider token receipts and response timestamp; not account debit. Boundary-crossing requests may differ. Failed requests lacking usage remain covered by conservative admission accounting.",
+    "components": {
+      "judge": {
+        "requests": 212,
+        "responses": 212,
+        "input": 97278,
+        "output": 5408,
+        "cache_hit": 33920,
+        "cache_miss": 63358,
+        "estimated_rmb": 0.0856684
+      },
+      "mn_fresh": {
+        "requests": 6216,
+        "responses": 6216,
+        "input": 34720067,
+        "output": 9347392,
+        "cache_hit": 14727296,
+        "cache_miss": 19992771,
+        "estimated_rmb": 57.676884920000056
+      },
+      "mn_reuse": {
+        "requests": 133,
+        "responses": 133,
+        "input": 606063,
+        "output": 34656,
+        "cache_hit": 226688,
+        "cache_miss": 379375,
+        "estimated_rmb": 0.5225327600000002
+      },
+      "probe": {
+        "requests": 1,
+        "responses": 1,
+        "input": 7,
+        "output": 2,
+        "cache_hit": 0,
+        "cache_miss": 7,
+        "estimated_rmb": 1.5e-05
+      },
+      "sm_fresh": {
+        "requests": 4930,
+        "responses": 4929,
+        "input": 24804599,
+        "output": 27207675,
+        "cache_hit": 108544,
+        "cache_miss": 24696055,
+        "estimated_rmb": 133.52892587999983
+      },
+      "sm_reuse": {
+        "requests": 405,
+        "responses": 405,
+        "input": 795783,
+        "output": 50113,
+        "cache_hit": 153728,
+        "cache_miss": 642055,
+        "estimated_rmb": 0.8455815599999993
+      }
+    },
+    "estimated_receipted_rmb": 192.6596085199999
+  },
+  "paired_micro_delta_pp": -0.9433962264150944,
+  "paired_micro_bootstrap_95ci_pp": [
+    -8.49056603773585,
+    6.60377358490566
+  ],
+  "stratified_paired_macro": {
+    "all": {
+      "delta_pp": -0.7464740282077741,
+      "bootstrap_95ci_pp": [
+        -8.257080610021788,
+        6.602697511753235
+      ],
+      "n_by_type": [
+        17,
+        19,
+        19,
+        18,
+        18,
+        15
+      ],
+      "method": "Paired resampling within each task type; six type means weighted equally; exploratory fixed-seed10000 draws."
+    }
+  }
+}

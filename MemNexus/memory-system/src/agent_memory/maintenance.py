@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 from datetime import datetime
 
+from .evidence_policy import source_assertion_spans
 from .models import Memory
 
 
@@ -27,11 +28,59 @@ def consolidation_key(memory: Memory) -> tuple:
     ) + (memory.semantics.model_dump_json(),)
 
 
+def _literal_pattern(value: str) -> str:
+    # Case/spacing are presentation differences; substrings are not identities.
+    return r"(?<!\w)" + r"\s+".join(re.escape(part) for part in value.split()) + r"(?!\w)"
+
+
+def _english_transition(source: Memory, target: Memory, quote: str) -> str | None:
+    """Recognize an explicit directional edit, not recency or general entailment.
+
+    Unsupported paraphrases remain readable as separate active facts. This
+    changes canonical lifecycle only when the quoted clause names both values
+    in their old/new roles and assigns the change to the same subject.
+    """
+    subject = _literal_pattern(source.subject)
+    old, new = _literal_pattern(target.value), _literal_pattern(source.value)
+    field = _literal_pattern(re.sub(r"[_-]+", " ", source.predicate))
+    # The subject directly performs the change, or its explicitly possessed
+    # field changes. Do not borrow a subject from a preceding reporting clause.
+    head = rf"^(?:correction\s*:\s*|actually,\s*)?(?P<subject>{subject})"
+    actor = rf"{head}(?:['’]s\s+{field})?\s+"
+    verb = r"(?:changed|switched|moved|updated|adjusted|renamed|revised)"
+    transition = rf"{actor}(?:(?:has|had|was|is|has\s+been|had\s+been)\s+)?{verb}\b[^;!?]*?\bfrom\s+(?P<old>{old})\s+to\s+(?P<new>{new})"
+    correction = rf"{actor}(?:is|was)\s+(?P<correction>not)\s+(?P<old>{old})\s*,?\s*but\s+(?P<new>{new})"
+    for left, right in source_assertion_spans(quote):
+        clause = quote[left:right].strip()
+        for pattern, action in ((transition, "supersede"), (correction, "correct")):
+            match = re.search(pattern, clause, re.IGNORECASE)
+            if match is None:
+                continue
+            # Literal names/values such as May or 'not available' are data,
+            # not grammatical operators. Mask only the matched argument spans.
+            remainder = list(clause)
+            for name in match.groupdict():
+                start, end = match.span(name)
+                remainder[start:end] = " " * (end - start)
+            remainder = "".join(remainder)
+            if re.search(r"\b(?:if|unless|whether|assuming|supposing|would|could|might|may|should|will)\b", remainder, re.IGNORECASE):
+                continue
+            # In a correction, the matched 'not OLD but NEW' operator is also
+            # masked; any additional negation must not silently invert it.
+            if not re.search(r"\b(?:not|never|no|without|cannot)\b|\b\w+n['’]t\b", remainder, re.IGNORECASE):
+                return action
+    return None
+
+
 def correction_relation(source: Memory, target: Memory, quotes: list[str]) -> str | None:
     """Only explicit old/new transitions qualify, never question or hypothesis text."""
-    if source.value == target.value or source.assertion not in {"stated", "observed"}:
+    if (fact_key(source) != fact_key(target) or source.value == target.value
+            or source.assertion not in {"stated", "observed"}):
         return None
     for quote in quotes:
+        english = _english_transition(source, target, quote)
+        if english:
+            return english
         if not all(value in quote for value in (source.subject, source.value, target.value)):
             continue
         if re.search(r"[?？]|如果|假如|假设|可能|是否|是不是", quote):
@@ -51,11 +100,10 @@ def retention(memory: Memory, now: datetime) -> dict:
     strength = math.exp(-math.log(2) * age_days / (half_life * max(1, reinforcement)))
     expired = memory.valid_to is not None and memory.valid_to <= now
     action = "keep"
-    if memory.status == "active":
-        if expired and memory.kind == "event":
-            action = "archive_expired_event"
-        elif strength < 0.25:
-            action = "review_archive"
+    # An ended validity interval excludes current use, not historical recall.
+    # Archiving is an explicit lifecycle decision, never a consequence of expiry.
+    if memory.status == "active" and strength < 0.25:
+        action = "review_archive"
     return {
         "memory_id": memory.memory_id,
         "version": memory.version,

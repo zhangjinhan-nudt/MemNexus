@@ -5,24 +5,21 @@ import hashlib
 import json
 import re
 import time
+from dataclasses import replace
+from datetime import UTC, datetime
 from weakref import WeakValueDictionary
 
 from . import __version__
 from .acceleration import InferenceCache
-from .composition import adjudicated_answer, indexed_answer
-from .composition import render as render_collection
+from .composition import collection_sources
 from .embeddings import build_embedder
-from .evidence_policy import question_only
+from .evidence_policy import assertion_supported
 from .grounding import (
     ANSWER_REASONING_CONTRACT,
-    close_evidence_bundles,
     collect_raw_records,
-    gap_queries,
     ground_evidence,
-    missing_required_info,
+    match_evidence,
     record_key,
-    reread_evidence,
-    retrieve_gaps,
     source_payload,
 )
 from .grounding import (
@@ -43,23 +40,52 @@ from .models import (
 )
 from .planning import BeliefState
 from .ports import ConflictError, ModelNotConfigured, NotFoundError
-from .providers import ModelOutputError, answer_call_budget, build_model
+from .prompt_codec import (
+    SOURCE_CATALOG_OVERHEAD,
+    synthesis_catalog_receipt,
+    synthesis_request_context,
+    synthesis_source_cost,
+)
+from .providers import answer_call_budget, build_model
 from .reasoning import (
     EventGraph,
+    _retrieval_terms,
     classify_question,
     indexed_memory_hits,
-    subject_recall_hits,
     typed_negative_gate,
 )
 from .retrieval import Retriever, _cosine, estimate_tokens
 from .retrieval_projection import RetrievalProjection
 from .settings import Settings
 
-
 _EVAL_DATE_SUFFIX = re.compile(
-    r"\s*\n\s*Question date:\s*\d{4}/\d{1,2}/\d{1,2}\s*\([^\n)]*\)\s*\d{1,2}:\d{2}\s*$",
+    r"\n[^\S\n]*Question date:[^\S\n]*(\d{4})/(\d{1,2})/(\d{1,2})"
+    r"(?:[^\S\n]*\([^\n)]*\)[^\S\n]*\d{1,2}:\d{2})?\s*\Z",
     re.IGNORECASE,
 )
+
+
+def _question_date(query: str):
+    """The moment the question is asked, when the benchmark supplies it.
+
+    Retrieval and routing need the question without the metadata suffix, but an
+    elapsed-time question ("how many days ago") has no computable answer without
+    that anchor.  So the date is separated from the text instead of being
+    discarded with it.
+
+    Returned as an aware datetime at midday: a benchmark date names a whole day,
+    and anchoring at noon keeps every relative-window derivation (which needs an
+    aware anchor) away from midnight edge effects.  Callers that only need the
+    day read ``str(as_of)[:10]``.
+    """
+    match = _EVAL_DATE_SUFFIX.search(query or "")
+    if match is None:
+        return None
+    try:
+        return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)),
+                        12, tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 def _reasoning_query(query: str) -> str:
@@ -73,37 +99,6 @@ def _reasoning_query(query: str) -> str:
     return _EVAL_DATE_SUFFIX.sub("", query).strip()
 from .short_term import ShortTermMemory
 from .store import SQLiteStore
-
-_ABSTENTION = re.compile(
-    r"not mentioned|insufficient evidence|no information|cannot (?:be )?determin|unable to (?:determine|answer)",
-    re.IGNORECASE,
-)
-
-
-def _is_abstention(text: str) -> bool:
-    """Whether a rendered answer declines to answer rather than answering."""
-    return bool(_ABSTENTION.search(text or ""))
-
-
-def _subject_present(entities, sources) -> bool:
-    """Whether the question's own subject appears anywhere in the evidence.
-
-    This is the gate that separates "the memory is there but the relation is not"
-    (a bounded inference may help) from "the conversation never mentions this
-    person/event" (an inference would be fabrication).
-    """
-    keys = [entity.casefold() for entity in entities or [] if entity]
-    if not keys:
-        return False
-    for hit in sources:
-        text = " ".join([
-            str(hit.metadata.get("subject") or ""),
-            hit.content,
-            *(str(event.get("text") or "") for event in hit.metadata.get("source_events", [])),
-        ]).casefold()
-        if any(re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", text) for key in keys):
-            return True
-    return False
 
 
 def _answer_contract(plan) -> str:
@@ -239,7 +234,10 @@ class MemoryRuntime:
             metrics=self.call_metrics,
         )
         self.short_term = ShortTermMemory(self.store, self.settings, model, self.call_metrics)
-        self.long_term = LongTermMemory(self.store, model=model, metrics=self.call_metrics)
+        self.long_term = LongTermMemory(
+            self.store, model=model, metrics=self.call_metrics,
+            enabled=self.settings.promotion_enabled,
+        )
         self._extraction_locks = WeakValueDictionary()
         self._maintenance_lock = asyncio.Lock()
         self._deletion_tasks: set[asyncio.Task] = set()
@@ -382,7 +380,7 @@ class MemoryRuntime:
     async def append_turn(self, scope: Scope, session_id: str, turn: TurnInput):
         if estimate_tokens(
             json.dumps(turn.prompt_dump(), ensure_ascii=False)
-        ) > self.settings.window_token_limit - 1800 and not _receipt_bound_assistant_input(turn):
+        ) > self.settings.max_turn_chars and not _receipt_bound_assistant_input(turn):
             raise ValueError("Turn too large; keep only relevant tool observations or split it")
         stored = await asyncio.to_thread(self.store.append_turn, scope, session_id, turn)
         session = await asyncio.to_thread(self.store.get_session, scope, session_id)
@@ -495,7 +493,7 @@ class MemoryRuntime:
                 for index, event in enumerate(turn.events):
                     # Assistant replies and questions remain conversational context,
                     # never independent factual retrieval evidence.
-                    if event.role == "assistant" or question_only(event.content):
+                    if event.role == "assistant" or not assertion_supported(event.content, event.content):
                         continue
                     if turn.sequence <= session.processed_sequence:
                         continue
@@ -504,6 +502,8 @@ class MemoryRuntime:
                     # exact original substring and has a stable offset identity.
                     for offset in range(0, len(event.content), 2000):
                         fragment = event.content[offset : offset + 2000]
+                        if not assertion_supported(event.content, fragment, start=offset, end=offset + len(fragment)):
+                            continue
                         short.append(
                             Memory(
                                 memory_id=f"raw_{turn.turn_id}_{index}_{offset}",
@@ -516,7 +516,8 @@ class MemoryRuntime:
                                 subject=event.role,
                                 predicate="recent_message",
                                 value=fragment,
-                                evidence=[Evidence(turn_id=turn.turn_id, event_index=index, quote=fragment)],
+                                evidence=[Evidence(turn_id=turn.turn_id, event_index=index, quote=fragment,
+                                                   start=offset, end=offset + len(fragment))],
                                 assertion={"user": "stated", "tool": "observed", "assistant": "inferred"}[
                                     event.role
                                 ],
@@ -528,6 +529,8 @@ class MemoryRuntime:
                         )
             # Local baseline scans only this owner's data; large-corpus indexing is an adapter task.
             snapshot_time = utcnow()
+            reasoning_time = _question_date(query)
+            query = _reasoning_query(query)
             try:
                 result = await self.retriever.search(
                     query,
@@ -539,6 +542,10 @@ class MemoryRuntime:
                     projection_scope=projection_scope,
                     projection_generation=projection_generation,
                     progress=progress,
+                    reasoning_time=reasoning_time,
+                    known_speakers=list(dict.fromkeys(
+                        event.speaker for turn in turns for event in turn.events if event.speaker
+                    )),
                 )
             except ConflictError:
                 await asyncio.to_thread(self.store.get_session, scope, session_id)
@@ -589,23 +596,30 @@ class MemoryRuntime:
         accelerate: bool = True,
         prepare: bool = True,
         progress=None,
+        source_session_ids: tuple[str, ...] = (),
+        source_read_scope: str = "quotes",
     ) -> AnswerResponse:
-        with answer_call_budget(
-            self.settings.semantic_execution_enabled,
-            max_calls=self.settings.semantic_max_answer_calls,
-        ) as allowance:
+        # One production answer request, plus the provider's bounded schema
+        # repair. The actual serialized request is checked at the HTTP adapter.
+        with answer_call_budget(True, max_calls=1) as allowance:
             return await self._answer_impl(scope, session_id, query, top_k, timeout,
                                            accelerate=accelerate, prepare=prepare,
-                                           progress=progress, allowance=allowance)
+                                           progress=progress, allowance=allowance, source_session_ids=source_session_ids,
+                                           source_read_scope=source_read_scope)
 
     async def _answer_impl(
-        self, scope, session_id, query, top_k, timeout, *, accelerate, prepare, progress, allowance,
+        self, scope, session_id, query, top_k, timeout, *, accelerate, prepare, progress, allowance, source_session_ids,
+        source_read_scope,
     ) -> AnswerResponse:
+        if source_read_scope not in {"quotes", "events"}:
+            raise ValueError("source_read_scope must be quotes or events")
         if self.model is None:
             raise ModelNotConfigured("No model configured for answer generation")
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         started = time.perf_counter()
+        as_of = _question_date(query)
+        search_query = query
         query = _reasoning_query(query)
         call_metrics_before = self.call_metrics.snapshot()
         run_events = []
@@ -623,12 +637,23 @@ class MemoryRuntime:
                 await progress(phase, detail, **data)
 
         async with asyncio.timeout(timeout):
+            source_sessions = {}
+            if source_session_ids:
+                def authorize():
+                    target = self.store.get_session(scope, session_id)
+                    sources = {}
+                    for sid in sorted(set(source_session_ids) - {session_id}):
+                        source = self.store.get_session(scope, sid)
+                        if source.project_id != target.project_id:
+                            raise NotFoundError("Session not found")
+                        sources[sid] = source
+                    return sources
+                source_sessions = await asyncio.to_thread(authorize)
             updates = await self.prepare_memory(scope, session_id, emit) if prepare else []
             await emit("planning", "正在理解问题，确定查询范围")
             version = await asyncio.to_thread(self.store.generation_version, scope, session_id)
-            retrieved = await self.search(scope, session_id, query, top_k, timeout, progress=emit)
-            if allowance is not None:
-                allowance["active"] = True
+            retrieved = await self.search(scope, session_id, search_query, top_k, timeout, progress=emit)
+            allowance["active"] = True
             await emit(
                 "retrieval",
                 f"检索完成：{retrieved.candidate_count} 条候选，选择 {len(retrieved.results)} 条证据",
@@ -647,20 +672,21 @@ class MemoryRuntime:
             turns = await asyncio.to_thread(self.store.turns, scope, session_id)
             known_entities = [event.speaker for turn in turns for event in turn.events if event.speaker]
             reasoning_route = classify_question(query, known_entities)
-            collection_query = retrieved.plan.collection_query if self.settings.collection_queries_enabled else None
-            synthesis = (self.settings.answer_synthesis_enabled and hasattr(self.model, "synthesize")
-                         and retrieved.plan.response_intent == "direct_answer"
-                         and self.settings.evidence_grounding_enabled)
-            complex_route = reasoning_route.kind in {"adversarial", "count", "set", "relation", "causal", "inference"}
-            semantic = (synthesis and self.settings.semantic_execution_enabled and hasattr(self.model, "bind_answer")
-                        and (not self.settings.semantic_execution_complex_only or complex_route))
-            execution = None
-            if semantic:
-                from .synthesis import execution_contract
-                retrieved.plan.answer_contract = execution_contract(query, retrieved.plan)
+            # The finalized retrieval plan owns type, coverage policy and hints.
+            # Reclassification supplies only question-specific diagnostics such
+            # as composition/negative-gate flags, never a second budget decision.
+            reasoning_route = replace(
+                reasoning_route,
+                kind=retrieved.plan.query_type,
+                recall_policy=retrieved.plan.recall_policy,
+                entities=tuple(retrieved.plan.query_entities),
+                constraints=tuple(retrieved.plan.query_constraints),
+            )
+            collection_query = retrieved.plan.collection_query
+            synthesis = (hasattr(self.model, "synthesize")
+                         and retrieved.plan.response_intent == "direct_answer")
             answer_table = None
-            collection_ir, indexed_ir, collection_sources = None, None, []
-            pending = sum(turn.sequence > session.processed_sequence for turn in turns)
+            relation_sources = []
             if collection_query is not None and retrieved.plan.response_intent == "direct_answer":
                 partition = await asyncio.to_thread(self.store.collection_memories, scope, collection_query)
                 eligibility_plan = retrieved.plan.model_copy(update={"subject": None, "predicate": None})
@@ -670,34 +696,10 @@ class MemoryRuntime:
                 references += [e.turn_id for m in partition for member in m.semantics.members
                                for e in member.evidence]
                 resolved = await asyncio.to_thread(self.store.source_turns, scope, references)
-                indexed_ir, collection_sources = await asyncio.to_thread(
-                    indexed_answer, collection_query, partition, resolved,
-                    snapshot=version, pending=pending, limit=min(self.settings.max_candidates, 120),
-                    as_of=retrieved.plan.as_of,
+                relation_sources = await asyncio.to_thread(
+                    collection_sources, collection_query, partition, resolved,
+                    limit=min(self.settings.max_candidates, 120),
                 )
-                if retrieved.plan.temporal_mode == "history" and retrieved.plan.as_of is None:
-                    indexed_ir.coverage.unresolved.append("history_requires_temporal_operator")
-                if collection_query.projection == "category" or collection_query.qualifier:
-                    indexed_ir.coverage.unresolved.append("query_projection_requires_semantics")
-                # A fully typed relation can be evaluated without a generation call.
-                # Legacy/ambiguous partitions go through one source adjudication instead.
-                blockers = ("legacy_semantics:", "missing_source:", "invalid_source:",
-                            "event_identity_unknown:", "unresolved_scalar_conflict:",
-                            "unprocessed_turns:", "index_budget_exhausted", "ambiguous_removal_identity:",
-                            "history_requires_temporal_operator", "query_projection_requires_semantics")
-                if not synthesis and indexed_ir.items and not any(
-                    reason.startswith(blockers) for reason in indexed_ir.coverage.unresolved
-                ):
-                    collection_ir = indexed_ir
-                    retrieved.results = collection_sources
-                    retrieved.selected_k = len(collection_sources)
-                    retrieved.context_tokens = 0  # No generation prompt on the indexed route.
-                    if retrieved.dynamic_k:
-                        retrieved.dynamic_k.selected_k = len(collection_sources)
-                        retrieved.dynamic_k.safety_cap = min(self.settings.max_candidates, 120)
-                        retrieved.dynamic_k.used_tokens = 0
-                        retrieved.dynamic_k.selection_policy = "typed_relation_enumeration_before_top_k"
-                    retrieval_ms = (time.perf_counter() - started) * 1000
             answer_limit = (
                 max(self.settings.prompt_token_limit, self.settings.complex_prompt_token_limit)
                 if synthesis or reasoning_route.recall_policy == "recall_first" or collection_query is not None
@@ -705,12 +707,8 @@ class MemoryRuntime:
             )
             grounding = GroundingTrace()
             blocked_events = set()
-            if collection_ir is not None:
-                grounding.enabled = True
-                grounding.initial_sources = grounding.final_sources = len(collection_sources)
-                grounding.resolved_source_events = collection_ir.coverage.source_spans_examined
-                grounding.coverage_measurement = "typed_query_relative_to_authorized_snapshot"
-            elif self.settings.evidence_grounding_enabled:
+            if synthesis or self.settings.evidence_grounding_enabled:
+                recall_candidates = retrieved.candidates or retrieved.results
                 lifecycle_memories = await asyncio.to_thread(self.store.memories, scope)
                 lifecycle_plan = retrieved.plan.model_copy(update={"subject": None, "predicate": None})
                 latest_memories = {}
@@ -724,50 +722,107 @@ class MemoryRuntime:
                 blocked_events = {
                     (e.turn_id, e.event_index)
                     for memory in latest_memories.values()
-                    if not self.retriever._eligible(memory, session, lifecycle_plan, utcnow())
-                    for e in memory.evidence
+                    if not self.retriever._eligible(
+                        memory, source_sessions.get(memory.session_id, session)
+                        if source_read_scope == "events" else session, lifecycle_plan, utcnow())
+                    for e in [*memory.evidence, *(e for member in memory.semantics.members for e in member.evidence)]
                 }
                 eligible = [
                     memory
                     for memory in latest_memories.values()
                     if self.retriever._eligible(memory, session, lifecycle_plan, utcnow())
                 ]
-                indexed = ([] if collection_query is not None and not synthesis else
-                           indexed_memory_hits(query, reasoning_route, eligible, retrieved.results,
-                                               limit=self.settings.indexed_sweep_limit))
-                subject_extra: list = []
-                subject_must: set[str] = set()
-                if (
-                    self.settings.subject_recall_enabled
-                    and retrieved.plan.query_entities
-                    and missing_required_info(
-                        [*retrieved.results, *indexed, *collection_sources],
-                        retrieved.plan.required_info,
-                    )
-                ):
-                    already = {
-                        str(hit.metadata.get("memory_id"))
-                        for hit in [*retrieved.results, *indexed, *collection_sources]
-                        if hit.metadata.get("memory_id")
-                    }
-                    subject_extra = await subject_recall_hits(
-                        query,
-                        list(retrieved.plan.query_entities),
-                        eligible,
-                        exclude=already,
-                        embedder=self.retriever.embedder,
-                        limit=self.settings.subject_recall_limit,
-                    )
-                    subject_must = {str(hit.metadata.get("memory_id")) for hit in subject_extra}
-                grounding_hits = [*retrieved.results, *indexed, *collection_sources, *subject_extra]
-                references = [
+                # Request-scoped archive access authorizes attributed old quotations,
+                # never promotion of the assistant's statements to facts about the user.
+                archive = {m.memory_id: m for m in latest_memories.values()
+                           if m.session_id in source_sessions and m.scope_type == "session"
+                           and m.status == "active" and m.evidence
+                           and self.retriever._eligible(m, source_sessions[m.session_id], lifecycle_plan, utcnow())}
+                if archive and retrieved.plan.temporal_mode == "current" and retrieved.plan.as_of is None:
+                    ends = [m.valid_to for m in archive.values() if m.valid_to is not None]
+                    if retrieved.snapshot_valid_until is not None:
+                        ends.append(retrieved.snapshot_valid_until)
+                    retrieved.snapshot_valid_until = min(ends, default=None)
+                index_memories = {m.memory_id: m for m in [*eligible, *archive.values()]}
+                source_refs = {m.memory_id: [*m.evidence, *(e for member in m.semantics.members
+                                                          for e in member.evidence)]
+                               for m in index_memories.values()}
+                revoked = {m.memory_id for m in latest_memories.values() if m.status in {"retracted", "archived"}}
+                denied = {(e.turn_id, e.event_index) for m in lifecycle_memories if m.memory_id in revoked
+                          for e in [*m.evidence, *(e for member in m.semantics.members for e in member.evidence)]}
+                references = [e.turn_id for refs in source_refs.values() for e in refs]
+                references += [
                     e["turn_id"]
-                    for hit in grounding_hits
+                    for hit in [*recall_candidates, *relation_sources]
                     for e in hit.metadata.get("evidence", [])
                     if "turn_id" in e
                 ]
                 resolved = await asyncio.to_thread(self.store.source_turns, scope, references)
-                fixed_header = _answer_header(
+                # Match only exact, currently permitted quotations, before the
+                # supplemental candidate cutoff. The same span annotations also
+                # travel with first-pass hits; selecting a memory is not enough.
+                matches = {}
+                readable_refs = {}
+                for memory in index_memories.values():
+                    refs = [e.model_dump(mode="json") for e in source_refs[memory.memory_id]
+                            if (e.turn_id, e.event_index) not in denied
+                            and e.turn_id in resolved
+                            and resolved[e.turn_id].session_id == memory.session_id]
+                    readable_refs[memory.memory_id] = refs
+                    spans = match_evidence(query, retrieved.plan, refs, resolved)
+                    if spans:
+                        matches[memory.memory_id] = spans
+                indexed = indexed_memory_hits(
+                    query, retrieved.plan, list(index_memories.values()), retrieved.results,
+                    limit=self.settings.indexed_sweep_limit, matched_evidence=matches,
+                    existing_candidates=recall_candidates,
+                )
+                grounding_hits = [*recall_candidates, *indexed, *relation_sources]
+                for hit in grounding_hits:
+                    if hit.metadata.get("memory_id") in readable_refs:
+                        hit.metadata["evidence"] = readable_refs[hit.metadata["memory_id"]]
+                    if spans := matches.get(hit.metadata.get("memory_id")):
+                        hit.metadata["matched_evidence"] = spans
+                archive_quotes = {}
+                if archive:
+                    safe_hits = []
+                    for hit in grounding_hits:
+                        anchor = archive.get(hit.metadata.get("memory_id"))
+                        if anchor:
+                            refs = []
+                            for e in source_refs[anchor.memory_id]:
+                                turn = resolved.get(e.turn_id)
+                                key = e.turn_id, e.event_index
+                                if (turn is None or turn.session_id != anchor.session_id or key in denied
+                                        or not 0 <= e.event_index < len(turn.events) or not e.quote
+                                        or e.quote not in turn.events[e.event_index].content):
+                                    continue
+                                refs.append(e.model_dump(mode="json"))
+                                archive_quotes.setdefault(key, []).append(e.model_dump(mode="json"))
+                            if not refs:
+                                continue
+                            # Ranking can use compression. The reader receives the source speaker
+                            # and verbatim span only, plus provenance for the receipt.
+                            hit.metadata = {k: hit.metadata[k] for k in ("memory_id","version","tier","session_id","origin","matched_evidence",
+                                            "retrieval_rank", "retrieval_rank_stage", "retrieval_channel_ranks")
+                                            if k in hit.metadata}
+                            # Preserve the topic that led to this source for
+                            # packing only. source_payload never publishes it.
+                            topic_words = _retrieval_terms(f"{anchor.subject} {anchor.predicate} {anchor.content}")
+                            requested_topic = set().union(*(_retrieval_terms(entity)
+                                for entity in retrieved.plan.query_entities)) if retrieved.plan.query_entities else set()
+                            hit.metadata["retrieval_hint"] = " ".join(sorted(requested_topic & topic_words))
+                            hit.metadata.update(source_support_status="authorized_session_quote", evidence=refs)
+                            hit.content = refs[0]["quote"]
+                        safe_hits.append(hit)
+                    grounding_hits = safe_hits
+                readable_sessions = tuple(source_sessions) if source_read_scope == "events" else ()
+                raw_turns = list(turns)
+                if readable_sessions:
+                    for sid in readable_sessions:
+                        raw_turns.extend(await asyncio.to_thread(self.store.turns, scope, sid))
+                    blocked_events.update(denied)
+                fixed_header = "" if synthesis else _answer_header(
                     session,
                     retrieved.plan,
                     retrieved.warnings,
@@ -779,23 +834,56 @@ class MemoryRuntime:
                 available_evidence_budget = answer_limit - estimate_tokens(fixed_header) - 1000
                 if available_evidence_budget < 0:
                     raise ValueError("Task/query contract alone exceeds prompt budget")
+                # Construct complete source units before the single budget
+                # decision. Reading permission is independent of whether a
+                # sentence happened to be retained by memory extraction.
+                authorized_quotes = {key: list(refs) for key, refs in archive_quotes.items()}
+                for memory in eligible:
+                    for evidence in [*memory.evidence, *(e for member in memory.semantics.members
+                                                         for e in member.evidence)]:
+                        key = evidence.turn_id, evidence.event_index
+                        if key not in blocked_events or memory.status == "active":
+                            authorized_quotes.setdefault(key, []).append(evidence.model_dump(mode="json"))
+                if readable_sessions:
+                    for turn in raw_turns:
+                        if turn.session_id not in readable_sessions:
+                            continue
+                        for event_index, event in enumerate(turn.events):
+                            key = turn.turn_id, event_index
+                            if key not in blocked_events:
+                                authorized_quotes.setdefault(key, []).append({
+                                    "turn_id": key[0], "event_index": key[1], "quote": event.content,
+                                    "start": 0, "end": len(event.content),
+                                })
+                context_sources = await asyncio.to_thread(
+                    self.store.source_turns, scope, [key[0] for key in authorized_quotes])
+                context_turns = list({t.turn_id: t for t in [*raw_turns, *context_sources.values()]}.values())
                 ground_options = {
                     "session_id": session_id,
-                    "current_turns": turns,
+                    "current_turns": raw_turns,
+                    "source_session_ids": readable_sessions,
                     "resolved_turns": resolved,
+                    "context_turns": context_turns,
+                    "authorized_quotes": authorized_quotes,
                     "blocked_events": blocked_events,
-                    "max_sources": min(top_k if top_k is not None else self.settings.max_top_k, 20),
-                    "raw_limit": self.settings.grounding_max_raw_sources
-                    * (2 if reasoning_route.recall_policy == "recall_first" else 1),
+                    # top_k limits retrieved memories, not the number of exact
+                    # original reading units they can expose. The one serialized
+                    # budget governs visibility; retain the public source-catalog
+                    # safety bound instead of an unrelated 20-unit cutoff.
+                    "max_sources": min(self.settings.max_candidates, 120),
                     "budget": min(
                         available_evidence_budget,
-                        answer_limit // 2,
-                        self.settings.retrieval_token_limit
-                        * (4 if synthesis or reasoning_route.recall_policy == "recall_first" else 2),
+                        int(answer_limit * .72) if synthesis else min(
+                            answer_limit // 2, self.settings.retrieval_token_limit
+                            * (4 if reasoning_route.recall_policy == "recall_first" else 2)),
                     ),
                     "candidate_limit": self.settings.max_candidates,
-                    "must_include": subject_must,
                 }
+                if synthesis:
+                    _, _, _, needs_time = synthesis_request_context(query, retrieved.plan, as_of)
+                    ground_options["source_cost"] = lambda hit, source_id: synthesis_source_cost(
+                        hit, source_id, needs_time=needs_time)
+                    ground_options["budget"] -= SOURCE_CATALOG_OVERHEAD
                 grounded = await asyncio.to_thread(
                     ground_evidence, query, retrieved.plan, grounding_hits, **ground_options
                 )
@@ -805,8 +893,8 @@ class MemoryRuntime:
                     and self.retriever.embedder is not None
                 ):
                     raw_records = collect_raw_records(
-                        query, retrieved.plan, turns, session_id, blocked_events
-                    )
+                        query, retrieved.plan, raw_turns, session_id, blocked_events,
+                        source_session_ids=readable_sessions)
                     raw_memories = [
                         Memory(
                             memory_id="raw:" + record_key(record),
@@ -851,14 +939,6 @@ class MemoryRuntime:
                         grounded.trace.raw_vector_inputs = len(raw_memories)
                         grounded.trace.raw_vector_reused = reused
                 retrieved.results = grounded.sources
-                if synthesis:
-                    retrieved.results = close_evidence_bundles(
-                        grounded.sources, turns, session_id=session_id, blocked_events=blocked_events,
-                        budget=min(available_evidence_budget, int(answer_limit * .72)),
-                        as_of=retrieved.plan.as_of,
-                    )
-                    from .grounding import _cost
-                    grounded.trace.context_tokens_estimate = sum(_cost(hit) for hit in retrieved.results)
                 retrieved.selected_k = len(grounded.sources)
                 retrieved.context_tokens = grounded.trace.context_tokens_estimate
                 grounding = grounded.trace
@@ -871,7 +951,7 @@ class MemoryRuntime:
                     retrieved.dynamic_k.covered_info = [
                         x for x in retrieved.plan.required_info if x not in grounding.final_missing_info
                     ]
-                    retrieved.dynamic_k.selection_policy = "source_join_and_bounded_coverage_selection"
+                    retrieved.dynamic_k.selection_policy = "complete_source_units_single_budget"
                 retrieval_ms = (time.perf_counter() - started) * 1000
                 await emit(
                     "retrieval",
@@ -880,292 +960,123 @@ class MemoryRuntime:
                     steps=[step.model_dump(mode="json") for step in retrieved.steps],
                     sources=[hit.model_dump(mode="json") for hit in retrieved.results],
                 )
-            event_graph = EventGraph.from_hits(retrieved.results) if not semantic and (synthesis or collection_query is None) else EventGraph()
-            gate_memories = None
-            if self.settings.negative_gate_full_scan_enabled:
-                # Only whole-store evidence can prove absence; the retrieved
-                # subgraph is a sample, not a proof. One SQLite scan, no model.
-                gate_memories = await asyncio.to_thread(self.store.memories, scope)
-            negative_gate = typed_negative_gate(query, reasoning_route, event_graph, gate_memories)
-            reasoning_context = event_graph.prompt_context(query, reasoning_route)
             reasoning_trace = {
-                "question_type": retrieved.plan.query_type if collection_query else reasoning_route.kind,
-                "recall_policy": retrieved.plan.recall_policy if collection_query else reasoning_route.recall_policy,
-                "entities": list(reasoning_route.entities),
-                "constraints": list(reasoning_route.constraints),
-                "graph_nodes": len(event_graph.nodes),
-                "graph_edges": len(event_graph.edges),
-                "deterministic_derivations": len(event_graph.derivations),
-                "typed_negative_gate": {
-                    "blocked": negative_gate.blocked,
-                    "reason": negative_gate.reason,
-                    "supported_source_ids": list(negative_gate.supported_source_ids),
-                },
+                "question_type": retrieved.plan.query_type,
+                "recall_policy": retrieved.plan.recall_policy,
+                "entities": list(retrieved.plan.query_entities),
+                "constraints": list(retrieved.plan.query_constraints),
+                "source_count": len(retrieved.results),
+                "source_event_count": sum(len(hit.metadata.get("source_events", []))
+                                          for hit in retrieved.results),
             }
-            if negative_gate.blocked:
-                await emit(
-                    "reasoning",
-                    "typed negative gate blocked unsupported positive evidence",
-                    reasoning=reasoning_trace,
+            if source_sessions:
+                reasoning_trace["authorized_source_sessions"] = sorted(source_sessions)
+                reasoning_trace["source_read_scope"] = source_read_scope
+            # Structured synthesis builds its own request from the source
+            # catalog. Only legacy text adapters need a generic graph/header.
+            header = prompt = ""
+            enabled = False
+            key = None
+            if not synthesis:
+                event_graph = EventGraph.from_hits(retrieved.results)
+                negative_gate = typed_negative_gate(query, reasoning_route, event_graph)
+                evidence = [
+                    f"【来源{i}】"
+                    + json.dumps(
+                        source_payload(hit),
+                        ensure_ascii=False,
+                    )
+                    for i, hit in enumerate(retrieved.results, 1)
+                ]
+                header = _answer_header(
+                    session,
+                    retrieved.plan,
+                    retrieved.warnings,
+                    query,
+                    evidence,
+                    self.settings.output_language,
+                    grounding.enabled,
                 )
-
-            evidence = [] if semantic or collection_ir is not None else [
-                f"【来源{i}】"
-                + json.dumps(
-                    source_payload(hit),
-                    ensure_ascii=False,
+                # Reserve space for the graph before serializing it. Long planner
+                # contracts must remain valid even when structured reasoning is
+                # enabled; the graph is compacted rather than overflowing the
+                # answer prompt.
+                reasoning_budget = max(
+                    0,
+                    answer_limit - estimate_tokens(header) - 1500,
                 )
-                for i, hit in enumerate(retrieved.results, 1)
-            ]
-            header = "" if semantic else _answer_header(
-                session,
-                retrieved.plan,
-                retrieved.warnings,
-                query,
-                evidence,
-                self.settings.output_language,
-                grounding.enabled,
-            )
-            # Reserve space for the graph before serializing it. Long planner
-            # contracts must remain valid even when structured reasoning is
-            # enabled; the graph is compacted rather than overflowing the
-            # answer prompt.
-            reasoning_budget = max(
-                0,
-                answer_limit - estimate_tokens(header) - 1500,
-            )
-            reasoning_context = event_graph.prompt_context(
-                query,
-                reasoning_route,
-                max_chars=min(2600, reasoning_budget),
-            )
-            header += "\n" + reasoning_context + "\n"
-            if negative_gate.reason.startswith("not_found_in_examined_evidence"):
-                header += (
-                    "No candidate in the examined graph satisfies the typed subject/object/time constraints. "
-                    "This is incomplete evidence, not proof of absence from the full conversation. "
-                    "Do not transfer another person's or another object's facts to fill the gap.\n"
+                reasoning_context = event_graph.prompt_context(
+                    query,
+                    reasoning_route,
+                    max_chars=min(2600, reasoning_budget),
                 )
-            if negative_gate.blocked:
-                header += (
-                    "TYPED NEGATIVE GATE: No authorized evidence satisfies the question's "
-                    "subject, object type, and time constraints. Answer exactly "
-                    "'Not mentioned in the conversation.' Do not transfer a fact from "
-                    "another person, object type, or time period.\n"
-                )
-            budget = answer_limit - estimate_tokens(header) - 1000
-            if budget < 0:
-                raise ValueError("Task/query/evidence exceed prompt budget")
-            selected_turns = []
-            # Keep answer prompts bounded even when extraction is delayed and the
-            # session contains several long assistant responses.
-            recent = turns[-min(self.settings.context_turns, 8) :] if self.settings.context_turns and not semantic else []
-            for turn in reversed(recent):
-                if grounding.enabled and any(
-                    (turn.turn_id, index) in blocked_events for index in range(len(turn.events))
-                ):
-                    continue
-                payload = _answer_context_turn_dump(turn, retrieved.plan)
-                if payload is None:
-                    continue
-                cost = estimate_tokens(json.dumps(payload, ensure_ascii=False)) + 2
-                if cost > budget:
-                    break
-                selected_turns.insert(0, payload)
-                budget -= cost
-            prompt = header + json.dumps(selected_turns, ensure_ascii=False)
-            # Retrieval and authorization always run first. Include the complete
-            # evidence identities/versions, scope and model identity, not query text
-            # alone. A correction/retraction/expiry cannot reuse obsolete evidence.
-            source_identity = json.dumps([(hit.source_file, hit.chunk_id) for hit in retrieved.results])
-            digest = hashlib.sha256((prompt + source_identity).encode("utf-8")).hexdigest()
-            # Retrieval scores/view labels may vary across equivalent model plans,
-            # but they are not generation inputs. Store revision and source identity
-            # guard provenance without defeating reuse of an identical prompt.
-            key = (scope.tenant_id, scope.owner_id, session_id, id(self.model), version, digest)
-            enabled = accelerate and self.settings.acceleration_enabled and collection_query is None and not synthesis
+                reasoning_trace.update({
+                    "graph_nodes": len(event_graph.nodes),
+                    "graph_edges": len(event_graph.edges),
+                    "deterministic_derivations": len(event_graph.derivations),
+                    "typed_negative_gate": {"blocked": negative_gate.blocked, "reason": negative_gate.reason},
+                })
+                header += "\n" + reasoning_context + "\n"
+                if negative_gate.reason.startswith("not_found_in_examined_evidence"):
+                    header += (
+                        "No candidate in the examined graph satisfies the typed subject/object/time constraints. "
+                        "This is incomplete evidence, not proof of absence from the full conversation. "
+                        "Do not transfer another person's or another object's facts to fill the gap.\n"
+                    )
+                budget = answer_limit - estimate_tokens(header) - 1000
+                if budget < 0:
+                    raise ValueError("Task/query/evidence exceed prompt budget")
+                selected_turns = []
+                # Keep answer prompts bounded even when extraction is delayed and the
+                # session contains several long assistant responses.
+                recent = turns[-min(self.settings.context_turns, 8) :] if self.settings.context_turns else []
+                for turn in reversed(recent):
+                    if grounding.enabled and any(
+                        (turn.turn_id, index) in blocked_events for index in range(len(turn.events))
+                    ):
+                        continue
+                    payload = _answer_context_turn_dump(turn, retrieved.plan)
+                    if payload is None:
+                        continue
+                    cost = estimate_tokens(json.dumps(payload, ensure_ascii=False)) + 2
+                    if cost > budget:
+                        break
+                    selected_turns.insert(0, payload)
+                    budget -= cost
+                prompt = header + json.dumps(selected_turns, ensure_ascii=False)
+                # Retrieval and authorization always run first. Include the complete
+                # evidence identities/versions, scope and model identity, not query text
+                # alone. A correction/retraction/expiry cannot reuse obsolete evidence.
+                source_identity = json.dumps([(hit.source_file, hit.chunk_id) for hit in retrieved.results])
+                digest = hashlib.sha256((prompt + source_identity).encode("utf-8")).hexdigest()
+                # Retrieval scores/view labels may vary across equivalent model plans,
+                # but they are not generation inputs. Store revision and source identity
+                # guard provenance without defeating reuse of an identical prompt.
+                key = (scope.tenant_id, scope.owner_id, session_id, id(self.model), version, digest)
+                enabled = accelerate and self.settings.acceleration_enabled and collection_query is None
             generation_started = time.perf_counter()
             inference = None
-            if semantic:
-                from .grounding import _cost
-                from .synthesis import check_and_execute, follow_up_gaps, merge_incremental, render_table
-                contract = retrieved.plan.answer_contract
+            if synthesis:
+                from .synthesis import answer_type, answer_values, binding_audit, render_table
                 self.call_metrics.record("answer")
-                semantic_error = None
+                _, _, _, catalog_needs_time = synthesis_request_context(query, retrieved.plan, as_of)
+                reasoning_trace["evidence_catalog"] = synthesis_catalog_receipt(
+                    retrieved.results, needs_time=catalog_needs_time)
                 try:
-                    bindings = await self.model.bind_answer(query, contract, retrieved.results)
-                    execution = check_and_execute(contract, bindings, retrieved.results)
-                except (ModelOutputError, ValueError) as error:
-                    semantic_error = str(error)
-                    self.call_metrics.record_error()
-                    bindings = None
-                    execution = None
-                    try:
-                        answer_table = await self.model.synthesize(query, retrieved.plan, retrieved.results)
-                        generated = render_table(answer_table, retrieved.results)
-                        reasoning_trace.update(answer_path="semantic_binding_fallback_synthesis",
-                                               semantic_error=semantic_error,
-                                               answer_table=answer_table.model_dump(mode="json"))
-                        semantic = False
-                    except Exception as fallback_error:
-                        # Both the typed binding and the synthesis fallback raised.
-                        # The text below is emitted by this handler, not decided by
-                        # the system, so the row must be flagged: protocol R2 reads
-                        # forced_abstain first and discards the accuracy of any run
-                        # that contains one.
-                        semantic_error += " | fallback=" + str(fallback_error)
-                        generated = "Insufficient evidence to determine the answer."
-                        reasoning_trace.update(answer_path="semantic_binding_failed", semantic_error=semantic_error,
-                                               forced_abstain=True)
-                initial_execution = execution.model_dump(mode="json") if execution else None
-                acquisition = {"stop_reason": "ready" if execution is not None and not execution.gaps else "disabled", "queries": []}
-                gap_action, retrieval_gaps = follow_up_gaps(execution) if execution is not None else ("ready", [])
-                # Open-world uncertainty is reported, but it is not an actionable
-                # premise gap. This prevents open-domain questions from paying for
-                # a second retrieval round that cannot prove global completeness.
-                if (retrieval_gaps and self.settings.open_domain_compat
-                        and reasoning_route.kind in {"set", "relation"}):
-                    retrieval_gaps = [g for g in retrieval_gaps if g.code != "member_scope_unknown"]
-                    if not retrieval_gaps:
-                        gap_action = "unresolved_scope"
-                if execution is not None and retrieval_gaps and (
-                        (gap_action == "reread" and self.settings.reread_enabled)
-                        or (gap_action == "retrieve" and self.settings.premise_retrieval_enabled)):
-                    remaining = int(answer_limit * .9) - sum(_cost(h) for h in retrieved.results)
-                    if gap_action == "reread":
-                        reread_sources, acquisition = reread_evidence(
-                            retrieved.results, turns=turns, session_id=session_id,
-                            blocked_events=blocked_events, budget=remaining,
-                            as_of=retrieved.plan.as_of,
-                            query=query, gaps=retrieval_gaps, bindings=bindings,
-                        )
-                        new_sources = reread_sources if acquisition.get("read_source_ids") else []
-                    else:
-                        gap_vectors = None
-                        if remaining > 0 and self.retriever.embedder is not None:
-                            queries = gap_queries(retrieved.plan, retrieval_gaps)
-                            raw = collect_raw_records(query, retrieved.plan, turns, session_id, blocked_events)
-                            if queries and raw:
-                                qv = await self.retriever.embedder.encode_query(queries)
-                                dv = await self.retriever.embedder.encode_documents([text for _, text in raw])
-                                gap_vectors = {record_key(r): [_cosine(q, d) for q in qv]
-                                               for (r,_),d in zip(raw,dv,strict=True)}
-                        new_sources, acquisition = retrieve_gaps(
-                            query, retrieved.plan, retrieval_gaps, retrieved.results,
-                            turns=turns, session_id=session_id, blocked_events=blocked_events, budget=remaining,
-                            semantic_scores=gap_vectors,
-                            candidate_hits=[*grounding_hits, *indexed_memory_hits(
-                                query, reasoning_route,
-                                eligible, retrieved.results,
-                                limit=self.settings.indexed_sweep_limit)],
-                            resolved_turns=resolved,
-                        )
-                    if new_sources and (allowance is None or allowance["normal_calls"] < allowance["max_calls"]):
-                        await self._check_version(scope, session_id, version)
-                        old_count = len(retrieved.results)
-                        if gap_action == "reread":
-                            combined = reread_sources
-                            changed_source_ids = acquisition.get("read_source_ids", [])
-                        else:
-                            combined = [*retrieved.results, *new_sources]
-                            changed_source_ids = []
-                        self.call_metrics.record("answer")
-                        try:
-                            revised = await self.model.bind_answer(
-                                query, contract, combined, previous=bindings,
-                                gaps=retrieval_gaps,
-                                source_offset=old_count,
-                                include_source_ids=changed_source_ids,
-                            )
-                            revised = merge_incremental(bindings, revised, {g.output_id for g in retrieval_gaps},
-                                                        sources=combined, contract=contract)
-                            revised_execution = check_and_execute(contract, revised, combined)
-                        except (ModelOutputError, ValueError) as error:
-                            # Keep the already validated initial result, never
-                            # manufacture a successful completion after failure.
-                            acquisition["stop_reason"] = "incremental_validation_failed"
-                            acquisition["validation_error"] = str(error)
-                            self.call_metrics.record_error()
-                        else:
-                            acquisition["answer_values_changed"] = revised_execution.values != execution.values
-                            acquisition["gap_count_before"] = len(execution.gaps)
-                            acquisition["gap_count_after"] = len(revised_execution.gaps)
-                            if gap_action == "reread":
-                                acquisition["stop_reason"] = ("reread_changed" if revised_execution.values != execution.values
-                                                              else "reread_no_change")
-                            bindings, execution = revised, revised_execution
-                            retrieved.results = combined
-                    elif new_sources:
-                        acquisition["stop_reason"] = "call_budget_exhausted"
-                if execution is not None:
-                    generated = execution.render(choice_question="Choose exactly one" in query)
-                    reasoning_trace.update(answer_path="semantic_execution", answer_contract=contract.model_dump(mode="json"),
-                                           bound_answer=bindings.model_dump(mode="json"), initial_execution=initial_execution,
-                                           execution=execution.model_dump(mode="json"), premise_retrieval=acquisition)
-                if allowance is not None:
-                    reasoning_trace["provider_request_budget"] = dict(allowance)
-                retrieved.selected_k = len(retrieved.results)
-                retrieved.context_tokens = sum(_cost(h) for h in retrieved.results)
-                grounding.final_sources = retrieved.selected_k
-                grounding.context_tokens_estimate = retrieved.context_tokens
-                cache_status = "disabled"
-                generation_ms = (time.perf_counter() - generation_started) * 1000
-            elif synthesis:
-                from .synthesis import render_table
-                self.call_metrics.record("answer")
-                try:
-                    reader_hints = None
-                    if (
-                        self.settings.llm_reader_hint_enabled
-                        and not reasoning_route.negative_gate
-                        and retrieved.results
-                    ):
-                        # Reader hint: a verified-quote free reading offered to
-                        # the contract synthesiser. Append-only: the contract
-                        # still validates every value it accepts.
-                        self.call_metrics.record("answer")
-                        from .llm_reader import read_answer
-                        reading = await read_answer(self.model, query, retrieved.results)
-                        if reading is not None:
-                            reader_hints = [reading]
-                            retrieved.warnings.append("reader_hint")
-                            reasoning_trace["reader_hint"] = reading["answer"][:120]
                     answer_table = await self.model.synthesize(
-                        query, retrieved.plan, retrieved.results, hints=reader_hints
+                        query, retrieved.plan, retrieved.results,
+                        as_of=as_of,
                     )
                 except Exception:
                     self.call_metrics.record_error()
                     raise
-                generated = render_table(answer_table, retrieved.results)
+                generated = render_table(answer_table, retrieved.results,
+                                         kind=answer_type(query), question=query)
                 reasoning_trace["answer_table"] = answer_table.model_dump(mode="json")
+                reasoning_trace["request_bindings"] = binding_audit(answer_table, retrieved.plan.answer_contract)
                 reasoning_trace["answer_path"] = "source_bound_synthesis"
                 cache_status = "disabled"
                 generation_ms = (time.perf_counter() - generation_started) * 1000
-            elif collection_ir is not None:
-                generated = render_collection(collection_ir, self.settings.output_language)
-                cache_status = "disabled"
-                generation_ms = 0.0
-            elif collection_query is not None and hasattr(self.model, "compose") and grounding.enabled:
-                await emit("generation", "逐来源核对答案成员，执行集合查询并检查输出完整性")
-                self.call_metrics.record("answer")
-                try:
-                    decisions = await self.model.compose(collection_query, retrieved.results, query)
-                    collection_ir = adjudicated_answer(
-                        collection_query, decisions, retrieved.results, snapshot=version, pending=pending
-                    )
-                except Exception:
-                    self.call_metrics.record_error()
-                    raise
-                if indexed_ir is not None:
-                    collection_ir.coverage.indexed_rows = indexed_ir.coverage.indexed_rows
-                    collection_ir.coverage.budget_exhausted = indexed_ir.coverage.budget_exhausted
-                generated = render_collection(collection_ir, self.settings.output_language)
-                cache_status = "disabled"
-                generation_ms = (time.perf_counter() - generation_started) * 1000
-            elif negative_gate.blocked:
-                generated = negative_gate.fallback_text
-                cache_status = "disabled"
-                generation_ms = 0.0
             else:
                 await emit("generation", "正在根据选中的证据组织回答")
 
@@ -1182,88 +1093,10 @@ class MemoryRuntime:
                 )
                 generated = inference.text
                 generation_ms = (time.perf_counter() - generation_started) * 1000
-            if negative_gate.blocked and self.settings.negative_gate_full_scan_enabled:
-                # Whole-store scan proved no authorised evidence: the rule's
-                # verdict overrides the model, instead of merely nudging it.
-                generated = "Not mentioned in the conversation."
-                warnings.append("typed_negative_gate_hard_abstain")
-            if collection_ir is not None:
-                reasoning_trace["answer_ir"] = collection_ir.model_dump(mode="json")
-            if (
-                self.settings.bounded_inference_enabled
-                and generated
-                and _is_abstention(generated)
-                and not reasoning_route.negative_gate
-                and hasattr(self.model, "infer_bounded")
-                and _subject_present(retrieved.plan.query_entities, retrieved.results)
-            ):
-                # Deterministic gate: the answer is empty, the question is not an
-                # adversarial one, and the queried subject is actually in the
-                # evidence. Only then may the model state one labelled inference.
-                self.call_metrics.record("answer")
-                try:
-                    inferred = await self.model.infer_bounded(query, retrieved.results)
-                except Exception as error:
-                    self.call_metrics.record_error()
-                    reasoning_trace["bounded_inference"] = {"error": str(error)}
-                else:
-                    reasoning_trace["bounded_inference"] = inferred.model_dump(mode="json")
-                    if not inferred.abstain and inferred.answer.strip():
-                        generated = inferred.answer.strip()
-                        reasoning_trace["answer_path"] = (
-                            str(reasoning_trace.get("answer_path") or "unknown") + "+bounded_inference"
-                        )
-            if (
-                self.settings.llm_reader_fallback_enabled
-                and generated
-                and _is_abstention(generated)
-                and not reasoning_route.negative_gate
-                and retrieved.results
-                and hasattr(self.model, "answer")
-            ):
-                # Last resort before abstaining: one free reading over the same
-                # grounded evidence.  The quote must verify verbatim against a
-                # cited source, so the answer cannot contain anything the
-                # evidence does not literally contain.
-                self.call_metrics.record("answer")
-                from .llm_reader import read_answer
-                reading = await read_answer(self.model, query, retrieved.results)
-                if reading is not None:
-                    generated = reading["answer"]
-                    retrieved.warnings.append("reader_fallback")
-                    reasoning_trace["reader_fallback"] = reading["answer"][:120]
-                    reasoning_trace["answer_path"] = (
-                        str(reasoning_trace.get("answer_path") or "unknown") + "+reader_fallback"
-                    )
-            if self.settings.temporal_rescue_enabled and _is_abstention(generated):
-                # Deterministic rescue for date-seeking questions: no model
-                # call.  On a non-adversarial route an abstention scores F1=0,
-                # so a quote-grounded date span is weakly dominant.  Never
-                # fires on the negative-gate route, so correct abstentions on
-                # adversarial questions are never overwritten.
-                if (
-                    not reasoning_route.negative_gate
-                    and retrieved.results
-                    and is_date_question(query)
-                ):
-                    from .temporal_rescue import rescue_temporal
-                    rescued = rescue_temporal(query, retrieved.results)
-                    if rescued is not None:
-                        generated = rescued["answer"]
-                        retrieved.warnings.append("temporal_rescue")
-                        reasoning_trace["temporal_rescue"] = {
-                            "answer": rescued["answer"],
-                            "quote": rescued["quote"][:200],
-                            "source_ids": rescued["source_ids"],
-                        }
-                        reasoning_trace["answer_path"] = (
-                            str(reasoning_trace.get("answer_path") or "unknown") + "+temporal_rescue"
-                        )
+            reasoning_trace["provider_request_budget"] = dict(allowance)
             if self.settings.answer_normalize_enabled and generated:
-                # Surface canonicalisation only. The abstracted memory path drops
-                # the literal form ("yesterday", "2023-01-29", "at least 3");
-                # restating the same fact in the common written form restores the
-                # anchor without adding or changing any fact.
+                # Display explicit ISO dates in a readable form; retain all
+                # claims, explanations, bounds and units in the answer.
                 from .synthesis import normalize_answer_text
                 generated = normalize_answer_text(generated, query)
             # A deletion/correction while inference was running must not publish
@@ -1288,9 +1121,7 @@ class MemoryRuntime:
         )
         if answer_table is not None:
             citations = sorted({ref.source_id for slot in answer_table.slots
-                                for value in slot.values for ref in value.supports})
-        if execution is not None:
-            citations = execution.source_ids
+                                for value in answer_values(slot) for ref in value.supports})
         warnings = list(retrieved.warnings)
         for update in updates:
             warnings.extend(update.get("evolution", {}).get("warnings", []))
@@ -1324,8 +1155,7 @@ class MemoryRuntime:
                 generation_ms=generation_ms,
                 total_ms=(time.perf_counter() - started) * 1000,
                 context_tokens_before=before,
-                context_tokens_after=(max(allowance["prompt_chars"], default=0) + 3) // 4
-                if semantic and allowance else estimate_tokens(prompt),
+                context_tokens_after=max(allowance["prompt_chars"], default=estimate_tokens(prompt)),
                 avoided_model_calls=int(cache_status in {"hit", "shared"}),
                 original_generation_ms=(
                     inference.generation_ms
@@ -1351,6 +1181,7 @@ class MemoryRuntime:
             run_events,
             expected_version=version,
             expected_valid_until=retrieved.snapshot_valid_until,
+            source_revisions={sid: source.revision for sid,source in source_sessions.items()},
         )
         if progress:
             await progress("completed", completed["detail"])

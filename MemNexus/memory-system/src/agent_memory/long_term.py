@@ -9,10 +9,14 @@ from .ports import ConflictError
 
 
 class LongTermMemory:
-    def __init__(self, store, model=None, metrics: CallMetrics | None = None):
+    def __init__(self, store, model=None, metrics: CallMetrics | None = None, enabled: bool = True):
         self.store = store
         self.model = model
         self.metrics = metrics
+        # Ablation switch: when False the promotion/merge pipeline is skipped
+        # entirely, so memories stay in the short tier. Used to measure the
+        # tier mechanism's contribution; default True preserves behaviour.
+        self.enabled = enabled
 
     async def evolve(self, scope: Scope, memory_id: str, command: EvolutionInput):
         return await asyncio.to_thread(self.store.evolve, scope, memory_id, command)
@@ -39,7 +43,7 @@ class LongTermMemory:
                     or source.tier != "short"
                     or not source.durable
                     or source.scope_type == "session"
-                    or source.assertion not in {"stated", "observed"}
+                    or source.assertion not in {"stated", "observed", "planned"}
                 ):
                     continue
                 evidence = self._user_evidence(scope, source)
@@ -55,7 +59,19 @@ class LongTermMemory:
                 if targets:
                     identical = [m for m in targets if same_fact(source, m)]
                     if len(targets) == 1 and identical:
-                        action, target = "merge", identical[0]
+                        combined_sources = {
+                            # Match store.evolve's source identity, including
+                            # repeated text at distinct positions. Legacy null
+                            # coordinates remain valid without guessed anchors.
+                            (e.turn_id, e.event_index, e.quote, e.start, e.end)
+                            for e in source.evidence + identical[0].evidence
+                        }
+                        if len(combined_sources) <= 30:
+                            action, target = "merge", identical[0]
+                        else:
+                            review.append({"memory_id": source.memory_id,
+                                           "reason": "source_capacity_keep_separate"})
+                            continue  # Source remains active and readable; no repeated outbox failure.
                     elif source.semantics.cardinality == "many":
                         pass  # New/removal members coexist; query execution folds their operations.
                     elif len(targets) == 1:
@@ -70,20 +86,15 @@ class LongTermMemory:
                     else:
                         action = None if source.semantics.cardinality == "one" else "promote"
                 if action is None:
-                    self.store.evolve(
-                        scope,
-                        source.memory_id,
-                        EvolutionInput(
-                            action="defer",
-                            expected_version=source.version,
-                        ),
-                    )
+                    # An unresolved relation prevents canonical consolidation,
+                    # not recall of the already validated source assertion.
+                    # Keep the active short record; explicit defer still quarantines.
                     review.append(
                         {
                             "memory_id": source.memory_id,
                             "reason": "conflicting_values_require_review",
                             "target_ids": [m.memory_id for m in targets],
-                            "suggested_actions": ["activate", "supersede", "retract"],
+                            "suggested_actions": ["supersede", "retract"],
                         }
                     )
                     continue
@@ -110,57 +121,19 @@ class LongTermMemory:
         return {"applied": applied, "review": review, "warnings": []}
 
     async def process_extraction(self, scope: Scope, memories):
-        report = await asyncio.to_thread(self._process, scope, memories)
-        deadline = asyncio.get_running_loop().time() + 30
-        if self.model and hasattr(self.model, "relate"):
-            for item in report["review"][:8]:
-                if not item.get("target_ids"):
-                    continue
-                try:
-                    source = await asyncio.to_thread(self.store.get_memory, scope, item["memory_id"])
-                    targets = [
-                        await asyncio.to_thread(self.store.get_memory, scope, mid)
-                        for mid in item["target_ids"]
-                    ]
-                    async with asyncio.timeout_at(deadline):
-                        if self.metrics:
-                            self.metrics.record("relation")
-                        proposal = await self.model.relate(source, targets)
-                    data = proposal.model_dump() if hasattr(proposal, "model_dump") else proposal
-                    quotes = {e.quote for e in source.evidence}
-                    if (
-                        not data.get("evidence_quotes")
-                        or data.get("target_id") not in item["target_ids"]
-                        or not all(
-                            quote and any(quote in original for original in quotes)
-                            for quote in data.get("evidence_quotes", [])
-                        )
-                    ):
-                        raise ValueError("Relation proposal references unsupported evidence/target")
-                    item["model_proposal"] = data
-                    item["automatically_applied"] = False
-                except Exception as exc:  # noqa: BLE001 - optional provider must not undo persisted extraction
-                    report["warnings"].append(f"relation_model_unavailable:{type(exc).__name__}")
-                    if asyncio.get_running_loop().time() >= deadline:
-                        break
-        return report
+        if not self.enabled:
+            return {"applied": [], "review": [], "warnings": ["promotion disabled by configuration"]}
+        # Only deterministic, source-supported evolution is committed here.
+        # A generated proposal with no downstream consumer used to spend tokens
+        # on every unresolved conflict without changing any memory or answer.
+        return await asyncio.to_thread(self._process, scope, memories)
 
     def _maintain(self, scope):
         applied, review = [], []
         with self.store.transaction():
             decisions = [retention(m, utcnow()) for m in self.store.memories(scope)]
             for item in decisions:
-                if item["recommendation"] == "archive_expired_event":
-                    self.store.evolve(
-                        scope,
-                        item["memory_id"],
-                        EvolutionInput(
-                            action="archive",
-                            expected_version=item["version"],
-                        ),
-                    )
-                    applied.append({"action": "archive", "memory_id": item["memory_id"]})
-                elif item["recommendation"] == "review_archive":
+                if item["recommendation"] == "review_archive":
                     review.append(item)
             canonical = {}
             for memory in self.store.memories(scope, tier="long"):

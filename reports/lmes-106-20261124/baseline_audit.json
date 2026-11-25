@@ -1,0 +1,12 @@
+{
+  "upstream_head": "db80b6a7c591e0ea730a058e9f5fc4eb06572299",
+  "generation_and_retrieval_prompt_changes": false,
+  "memory_builder_changes": "Three counters expose failed extraction windows; extraction prompts and processing logic unchanged.",
+  "adapter_changes": [
+    "Inject common local Qwen embedding service",
+    "Align defaults to registered paper settings",
+    "Enforce Qwen query encoding rather than silently falling back",
+    "Record provider receipts and budgets, control decoding and retry transient errors"
+  ],
+  "measurement": "Diff against repository HEAD, ignoring CRLF-only differences. No git index or working source changes during this audit."
+}

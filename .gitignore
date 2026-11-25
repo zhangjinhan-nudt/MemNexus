@@ -83,3 +83,16 @@ desktop.ini
 .pytest_tmp/
 **/.pytest_basetemp/
 .workbuddy/
+
+# Reproducible test scratch space (never source tests)
+**/.pytest_tmp*/
+**/.tmp_*/
+/.tmp/
+
+# Local literature, unpublished drafts and downloaded paper text
+/ACL/
+/CIPS/
+/refer/
+/paper/
+/simplemem_paper.txt
+/releases/**/*.local.json

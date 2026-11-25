@@ -1551,6 +1551,32 @@ def ground_evidence(
     if best is not None:
         _, selected_candidates, used = best
         selected = [c.hit for c in selected_candidates]
+    # Recover already constructed discourse context using spare capacity only.
+    # Never evict another source or alter the chosen candidate identities.
+    # Require exact interval containment: an alternative is not necessarily
+    # a superset merely because it is called "context".
+    context_upgrades = set()
+    for index, current in enumerate(list(selected_candidates)):
+        if current.variant != "compact":
+            continue
+        alternatives = [c for c in reading_candidates
+                        if c.parent_id == current.parent_id and c.variant == "context"]
+        for expanded in alternatives:
+            records = current.hit.metadata.get("source_events", [])
+            if not records or not _records_already_visible(records, [expanded.hit], source_turns):
+                continue
+            others = [c.hit for i, c in enumerate(selected_candidates) if i != index]
+            if _records_already_visible(expanded.hit.metadata.get("source_events", []),
+                                        [current.hit, *others], source_turns):
+                continue
+            proposal = list(selected_candidates)
+            proposal[index] = expanded
+            total = sum(cost(c, i) for i, c in enumerate(proposal, 1))
+            if total <= budget:
+                selected_candidates, used = proposal, total
+                context_upgrades.add(expanded.key)
+                break
+    selected = [c.hit for c in selected_candidates]
     final_keys = {c.key for c in selected_candidates}
     decisions_by_key = {(d["parent_id"], d["variant"], d["rank"]): d for d in decisions}
     for candidate in reading_candidates:
@@ -1558,6 +1584,8 @@ def ground_evidence(
         final = candidate.key in final_keys
         if final != decision["selected"]:
             decision["reason"] = "selected_by_exchange" if final else "replaced_by_coverage"
+        if candidate.key in context_upgrades:
+            decision["reason"] = "context_restored_with_spare_budget"
         decision["selected"] = final
     for source_id, candidate in enumerate(selected_candidates, 1):
         candidate.hit.metadata["selection_rank"] = candidate.rank
